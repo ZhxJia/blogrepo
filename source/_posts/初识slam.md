@@ -7,6 +7,6 @@ tags:
 mathjax: true
 ---
 
-![slam流程图](初识slam/slam.png)
+![slam流程图](slam.png)
 
 <center> 图1. slam 流程图 </center>
