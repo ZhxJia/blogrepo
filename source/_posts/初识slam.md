@@ -1,5 +1,4 @@
 ---
-{}
 title: slam初探
 categories:
 - slam
