@@ -7,7 +7,7 @@ tags:
 mathjax: true
 ---
 
-<img src="初识slam/slam-structure.png" alt="slam 流程图" style="zoom:50%;" />
+![slam流程图](初识slam/slam-structure.pngstyle)
 
 <center> 图1. slam 流程图 </center>
 
