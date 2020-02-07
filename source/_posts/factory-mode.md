@@ -1,0 +1,15 @@
+---
+{}
+title:
+date:
+updated:
+permalink:
+categories:
+tags:
+mathjax:
+description:
+keywords:
+comments:
+link:
+top:
+---
