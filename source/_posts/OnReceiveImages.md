@@ -1,3 +1,15 @@
+---
+title: Apollo回调函数概览
+categories:
+- 无人驾驶
+- 感知
+tags:
+- 感知
+mathjax: true
+---
+OnReceiveImages()内部函数处理流程:
+<!--more-->
+
 1. 由FusionCameraDetectionComponent::Init()中的InitCameraListeners()创建回调函数
 
 ``` c++
