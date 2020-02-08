@@ -320,6 +320,16 @@ Apollo 中大量采用了这种方式管理配置，Apollo激活车辆的配置�
 
 ### 参考链接
 
+> [1]   https://www.ibm.com/developerworks/cn/linux/l-cn-gpb/index.html protobuf 相关介绍
+>
+> [2]   https://zhuanlan.zhihu.com/p/61838008 本文主要参考文章
+>
+> [3]   http://apollo.auto/docs/procedure_cn.html  针对车辆CAN DBC文件如何生成proto文件
+>
+> [4]   https://github.com/ApolloAuto/apollo/tree/master/modules/canbus  "canbus"
+>
+> [5]   https://zh.wikipedia.org/wiki/%E5%B7%A5%E5%8E%82%E6%96%B9%E6%B3%95#cite_note-1(https://zh.wikipedia.org/wiki/工厂方法#cite_note-1)   
+
 > [1]: https://www.ibm.com/developerworks/cn/linux/l-cn-gpb/index.html	"protobuf 相关介绍"
 > [2]: https://zhuanlan.zhihu.com/p/61838008	"本文主要参考文章"
 > [3]: http://apollo.auto/docs/procedure_cn.html	"针对车辆CAN DBC文件如何生成proto文件"
