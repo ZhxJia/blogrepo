@@ -18,19 +18,23 @@ apollo 中工厂模式相关知识介绍
 > - [https://zh.wikipedia.org/wiki/%E5%B7%A5%E5%8E%82%E6%96%B9%E6%B3%95](https://zh.wikipedia.org/wiki/工厂方法)
 > - 《设计模式：可复用面向对象软件的基础》
 
+### 1. Apollo 对象的创建方式
+
+基本由 栈创建对象、堆创建对象、单例模式创建对象、工厂模式创建对象
+
 Apollo项目中对象的创建，大多使用直接法，例如：
 
-> //在栈(stack)上直接创建对象
->
-> ADCTrajectory not_ready_pb;
->
-> //在堆(heap)上直接创建对象
->
-> ZeroCopyOutputStream *output = new FileOutputStream(file_descriptor);
->
-> > 堆和栈的主要区别在于 `生命周期` 和 `性能` 由于栈的特性，栈上的对象不需要手动管理内存，而堆由程序员自行负责何时用delete释放内存，动态内存的生命周期由我们决定更加灵活。
+- //在栈(stack)上直接创建对象
 
-还有部分通过`单例模式`创建：`DECLARE_SINGLETON(CanClientFactory)` ,其定义如下：
+  ADCTrajectory not_ready_pb;
+
+- //在堆(heap)上直接创建对象
+
+  ZeroCopyOutputStream *output = new FileOutputStream(file_descriptor);
+
+> 堆和栈的主要区别在于 `生命周期` 和 `性能` 由于栈的特性，栈上的对象不需要手动管理内存，而堆由程序员自行负责何时用delete释放内存，动态内存的生命周期由我们决定更加灵活。
+
+- 还有部分通过`单例模式`创建：`DECLARE_SINGLETON(CanClientFactory)` ,其定义如下：
 
 ```c++
 #define DECLARE_SINGLETON(classname)                                      \
@@ -57,17 +61,13 @@ Apollo项目中对象的创建，大多使用直接法，例如：
   DISALLOW_COPY_AND_ASSIGN(classname)
 
 ```
-
-其中内嵌宏 `DISALLOW_COPY_AND_ASSIGN(classname)`的定义如下：
-
+​	其中内嵌宏 `DISALLOW_COPY_AND_ASSIGN(classname)`的定义如下：
 ```c++
 #define DISALLOW_COPY_AND_ASSIGN(classname) \
   classname(const classname &) = delete;    \
   classname &operator=(const classname &) = delete;
 ```
-
-因此：`DECLARE_SINGLETON(CanClientFactory)` 展开后的定义为：
-
+​	因此：`DECLARE_SINGLETON(CanClientFactory)` 展开后的定义为：
 ```c++
 #define DECLARE_SINGLETON(CanClientFactory)                                      \
  public:                                                                  \
@@ -95,7 +95,7 @@ Apollo项目中对象的创建，大多使用直接法，例如：
 
 ```
 
-上述代码的意义，首先定义一个静态公有函数Instance(),该函数在栈上创建一个`CanClientFactory` 类的静态对象，然后返回该对象指针。同时，将`CanClientFactory` 类的默认构造函数、复制（或称拷贝）构造函数、复制赋值运算符（或称操作符）定义为私有（private）函数，即禁止进行隐式类型转换和复制操作。
+​		上述代码的意义，首先定义一个静态公有函数Instance(),该函数在栈上创建一个`CanClientFactory` 类的静态对象，然后返回该对象指针。同时，将`CanClientFactory` 类的默认构造函数、复制（或称拷贝）构造函数、复制赋值运算符（或称操作符）定义为私有（private）函数，即禁止进行隐式类型转换和复制操作。**单例模式保证一个类只有一个实例，并提供一个访问它的全局访问点，即通过静态指针来指向此唯一实例**
 
 > c++中的static关键词可以用于修改局部变量，函数，类的数据成员以及对象。
 >
@@ -106,6 +106,33 @@ Apollo项目中对象的创建，大多使用直接法，例如：
 > 静态对象：`static Test t1；` 
 >
 > ​	静态对象只初始化一次，并且在整个程序的生命周期中都存在，静态对象保存在静态存储区，在程序结束时销毁。
->
-> 
+
+- 还有部分对象通过工厂模式创建对象，例如：
+
+  ```c++
+  /**
+   * @class VehicleFactory
+   *
+   * @brief This class is a factory class that will generate different
+   * vehicle factories based on the vehicle brand.
+   */
+  class VehicleFactory
+      : public common::util::Factory<apollo::common::VehicleBrand,
+                                     AbstractVehicleFactory> {
+   public:
+    /**
+     * @brief register supported vehicle factories.
+     */
+    void RegisterVehicleFactory();
+  
+    /**
+     * @brief Creates an AbstractVehicleFactory object based on vehicle_parameter
+     * @param vehicle_parameter is defined in vehicle_parameter.proto
+     */
+    std::unique_ptr<AbstractVehicleFactory> CreateVehicle(
+        const VehicleParameter &vehicle_parameter);
+  };
+  ```
+
+  关于工厂模式的介绍，可以参考：[https://blog.csdn.net/linwh8/article/details/51232834][https://blog.csdn.net/linwh8/article/details/51232834]
 
