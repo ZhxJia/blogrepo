@@ -11,6 +11,8 @@ mathjax: true
 apollo 中工厂模式相关知识介绍
 <!-- more -->
 
+[TOC]
+
 本文主要参考：[https://blog.csdn.net/davidhopper/article/details/79197075](https://blog.csdn.net/davidhopper/article/details/79197075)
 
 工厂模式的定义和实现相关资料可参考：
@@ -134,5 +136,26 @@ Apollo项目中对象的创建，大多使用直接法，例如：
   };
   ```
 
-  关于工厂模式的介绍，可以参考：[https://blog.csdn.net/linwh8/article/details/51232834][https://blog.csdn.net/linwh8/article/details/51232834]
+  关于工厂模式的介绍，可以参考：[https://blog.csdn.net/linwh8/article/details/51232834][https://blog.csdn.net/linwh8/article/details/51232834]  下面简单介绍
 
+### 2. 浅谈工厂模式
+
+![](factory-mode/factorymode.png)
+
+首先`ProductFactory`可以想象为生产某种产品（抽象类产品）的某类工厂（抽象类工厂），此抽象类工厂演变出许多实例化对象，即为实际的工厂（工厂实例化对象）：`ConcreteProductFactoryA,ConcreteProductFactoryB` ,而这两个**实例化工厂**生产的内容与抽象工厂定义的内容一致，即包含一个抽象类product。
+
+然后`Product`某种产品（抽象类产品），它能演变出许多实例化对象:`ConcreteProductA,ConcreteProductB` ,也就是上面的实例化工厂都能生产A、B两种产品。
+
+举个栗子：
+
+现在由生产口罩的工厂（抽象类工厂）：工厂A(工厂实例化对象)，工厂B(工厂实例化对象)。这两个工厂都生产口罩（抽象类产品）：KN95口罩（产品实例化对象）、一次性医用口罩(产品实例化对象)。
+
+### 3.Apollo项目工厂模式分析
+
+​	Apollo采用的是抽象工厂模式，因为该项目使用模板定义工厂类，因此工厂模式经典定义中的抽象工厂类不再需要，Apollo提供了一个工厂模板(`modules/common/util/factory.h`) ,该模板可支持任何类型的输入，类图如下：
+
+![](factory-mode/ApolloFactory.png)
+
+> Factory类中包含了`Register()`、`Unregister()` 、`Empty()`、`CreateObjectOrNull()`、`CreateObject()` 等公有函数，其中`Register()` 、`Unregister()`函数用于注册和反注册产品类，其作用与经典模式中抽象工厂接口类的功能类似，`Empty()` 函数用于判断当前工厂类中是否包含产品创建函数，`CreateObjectOrNull()`、`CreateObject()` 函数用于创建可能包含空指针和不包含空指针的产品类堆象。
+
+​	Factory工厂模板维护了一个Map用来管理`IdentifierType`和`ProductCreator`的键值对，根据输入的`IdentifierType`,模板可以返回`ProductCreator`生产的产品，从而实现了从`IdentifierType`到`Productde` "映射"
