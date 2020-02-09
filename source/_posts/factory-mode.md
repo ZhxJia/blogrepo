@@ -136,7 +136,11 @@ Apollo项目中对象的创建，大多使用直接法，例如：
   };
   ```
 
-  关于工厂模式的介绍，可以参考：[https://blog.csdn.net/linwh8/article/details/51232834][https://blog.csdn.net/linwh8/article/details/51232834]  下面简单介绍
+  关于工厂模式的介绍，可以参考：下面简单介绍
+  
+  [https://blog.csdn.net/linwh8/article/details/51232834][https://blog.csdn.net/linwh8/article/details/51232834]  
+  
+  [https://www.runoob.com/design-pattern/abstract-factory-pattern.html][https://www.runoob.com/design-pattern/abstract-factory-pattern.html]
 
 ### 2. 浅谈工厂模式
 
@@ -156,6 +160,106 @@ Apollo项目中对象的创建，大多使用直接法，例如：
 
 ![](factory-mode/ApolloFactory.png)
 
-> Factory类中包含了`Register()`、`Unregister()` 、`Empty()`、`CreateObjectOrNull()`、`CreateObject()` 等公有函数，其中`Register()` 、`Unregister()`函数用于注册和反注册产品类，其作用与经典模式中抽象工厂接口类的功能类似，`Empty()` 函数用于判断当前工厂类中是否包含产品创建函数，`CreateObjectOrNull()`、`CreateObject()` 函数用于创建可能包含空指针和不包含空指针的产品类堆象。
+> Factory类中包含了`Register()`、`Unregister()` 、`Empty()`、`CreateObjectOrNull()`、`CreateObject()` 等公有函数，其中`Register()` 、`Unregister()`函数用于注册和反注册产品类，其作用与经典模式中抽象工厂接口类的功能类似，`Empty()` 函数用于判断当前工厂类中是否包含产品创建函数，`CreateObjectOrNull()`、`CreateObject()` 函数用于创建可能包含空指针和不包含空指针的产品类对象。
 
 ​	Factory工厂模板维护了一个Map用来管理`IdentifierType`和`ProductCreator`的键值对，根据输入的`IdentifierType`,模板可以返回`ProductCreator`生产的产品，从而实现了从`IdentifierType`到`Productde` "映射"
+
+```c++
+template <typename IdentifierType, class AbstractProduct,
+          class ProductCreator = AbstractProduct *(*)(),
+          class MapContainer = std::map<IdentifierType, ProductCreator>>
+```
+
+Factory类模板中参数`ProductCreator=AbstractProduct*（*）()` 全部采用简洁的Lambda表达式实现
+
+> lambda 表达式：
+>
+> 完整格式声明：`[capture list] (params list) mutable exception-> return type { function body }`
+>
+> capture list:捕获外部变量列表  params list:形参列表 exception:异常设定（一般省略）
+
+Apollo项目中对Factory类实例化的情形包括但不限于：
+
+```c++
+class VehicleFactory
+    : public common::util::Factory<apollo::common::VehicleBrand,
+                                   AbstractVehicleFactory>{/*.../*}
+```
+
+```c++
+class CanClientFactory
+    : public apollo::common::util::Factory<CANCardParameter::CANCardBrand,
+                                           CanClient> {/*.../*}
+```
+
+```c++
+apollo::common::util::Factory<TaskConfig::TaskType, NaviTask> task_factory_;
+```
+
+```c++
+common::util::Factory<PlannerType, Planner> planner_factory_
+```
+
+
+
+注册产品类代码为：
+
+```c++
+void NaviPlanner::RegisterTasks() {
+  task_factory_.Register(TaskConfig::NAVI_PATH_DECIDER,
+                         []() -> NaviTask* { return new NaviPathDecider(); });
+  task_factory_.Register(TaskConfig::NAVI_SPEED_DECIDER,
+                         []() -> NaviTask* { return new NaviSpeedDecider(); });
+}
+```
+
+代码中的产品创建函数`ProductCreator=AbstractProduct*（*）()` 采用Lambda表达式实现。
+
+创建具体的产品类对象的代码为:
+
+`modules/planning/planner/navi/navi_planner.cc`
+
+```c++
+Status NaviPlanner::Init(const PlanningConfig& config) {
+  // NaviPlanner is only used in navigation mode based on the real-time relative
+  // map.
+  if (!FLAGS_use_navigation_mode) {
+    std::string msg = "NaviPlanner is only used in navigation mode.";
+    AERROR << msg;
+    return Status(ErrorCode::PLANNING_ERROR, msg);
+  }
+
+  AINFO << "In NaviPlanner::Init()";
+  RegisterTasks();
+  PlannerNaviConfig planner_conf =
+      config.navigation_planning_config().planner_navi_config();
+  for (const auto task : planner_conf.task()) {
+    tasks_.emplace_back(
+        task_factory_.CreateObject(static_cast<TaskConfig::TaskType>(task)));
+    AINFO << "Created task:" << tasks_.back()->Name();
+  }
+  for (auto& task : tasks_) {
+    if (!task->Init(config)) {
+      std::string msg(
+          common::util::StrCat("Init task[", task->Name(), "] failed."));
+      AERROR << msg;
+      return Status(ErrorCode::PLANNING_ERROR, msg);
+    }
+  }
+  return Status::OK();
+}
+
+```
+
+配置文件为：`modules/planning/conf/planning_config_navi.pb.txt`
+
+```c++
+planner_type : NAVI
+planner_navi_config {
+  task : NAVI_PATH_DECIDER
+  task : NAVI_SPEED_DECIDER
+  //...
+```
+
+上述配置文件表明，`NaviPlanner`类动态生成了`NAVI_PATH_DECIDER` 、`NAVI_SPEED_DECIDER` 任务对象。
+

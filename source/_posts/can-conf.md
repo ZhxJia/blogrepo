@@ -14,6 +14,8 @@ apollo开源框架中can卡的配置
 
 ### 1. 前置内容
 
+本文主要参考：https://zhuanlan.zhihu.com/p/61838008
+
 Apollo 在车辆的信息交互和车辆配置上均使用了`Protobuf` 
 
 > Protocol Buffers 是一种轻便高效的结构化数据存储格式，可以用于结构化数据串行化，或者说序列化。它很适合做数据存储或 RPC 数据交换格式。可用于通讯协议、数据存储等领域的语言无关、平台无关、可扩展的序列化结构数据格式。目前提供了 C++、Java、Python 三种语言的 API。[[1]][1]
@@ -298,13 +300,162 @@ Apollo 中大量采用了这种方式管理配置，Apollo激活车辆的配置�
     >
     > 
 
-  #### 3.2 CANBus工厂模式
+#### 3.2 CANBus工厂模式
 
-  通过上述方法能够增加新车型的原因在于Apollo的配置基于`工厂模型` （参见另一篇文章）实现的。
+通过上述方法能够增加新车型的原因在于Apollo的配置基于`工厂模型` （参见另一篇文章）实现的。
 
-  > 工厂方法模式（Factory method pattern）是一种实现了“工厂”概念的`面向对象设计模式` 。就像其他`创建型模式`一样，它也是处理在不指定`对象`具体类型的情况下创建对象的问题。工厂方法模式的实质是“定义一个创建对象的接口，但让实现这个接口的类来决定实例化哪个`类` ”。工厂方法让类的实例化推迟到子类中进行。[[5]][5]
+> 工厂方法模式（Factory method pattern）是一种实现了“工厂”概念的`面向对象设计模式` 。就像其他`创建型模式`一样，它也是处理在不指定`对象`具体类型的情况下创建对象的问题。工厂方法模式的实质是“定义一个创建对象的接口，但让实现这个接口的类来决定实例化哪个`类` ”。工厂方法让类的实例化推迟到子类中进行。[[5]][5]
 
-  CANBus模块中Vehicle相关的内容使用工厂模式抽象出了`VehicleController`,`MessageManager`,`AbstractVehicleFactory` 三个接口。CANBus的**业务**代码(`canbus_component.cc`) 通过以上接口来操纵具体的对象，用户无需关心具体的对象是什么，从而实现了业务逻辑和目标对象的解耦。
+CANBus模块中Vehicle相关的内容使用工厂模式抽象出了`VehicleController`,`MessageManager`,`AbstractVehicleFactory` 三个接口。CANBus的**业务**代码(`canbus_component.cc`) 通过以上接口来操纵具体的对象，用户无需关心具体的对象是什么，从而实现了业务逻辑和目标对象的解耦。
+
+ 
+
+在Canbus模块中，工厂类为"VehicleFactory",继承于工厂模板"Factory"。"VehicleFactory"工厂维护了键值对为“VehicleParameter::VechileBrand”和"AbstractVehicleFactory"的Map。
+
+
+
+如下所示，每新注册注册一种车型，该Map中就会插入一条汽车品牌(VehicleBrand)和该品牌汽车生产工厂(AbstractVehicleFactory)的键值对。(ProductCreator 采用Lambda 表达式)
+
+```c++
+void VehicleFactory::RegisterVehicleFactory() {
+  Register(apollo::common::LINCOLN_MKZ, []() -> AbstractVehicleFactory * {
+    return new LincolnVehicleFactory();
+  });
+  Register(apollo::common::GEM, []() -> AbstractVehicleFactory * {
+    return new GemVehicleFactory();
+  });
+  Register(apollo::common::LEXUS, []() -> AbstractVehicleFactory * {
+    return new LexusVehicleFactory();
+  });
+  Register(apollo::common::TRANSIT, []() -> AbstractVehicleFactory * {
+    return new TransitVehicleFactory();
+  });
+  Register(apollo::common::GE3, []() -> AbstractVehicleFactory * {
+    return new Ge3VehicleFactory();
+  });
+  Register(apollo::common::WEY, []() -> AbstractVehicleFactory * {
+    return new WeyVehicleFactory();
+  });
+  Register(apollo::common::ZHONGYUN, []() -> AbstractVehicleFactory * {
+    return new ZhongyunVehicleFactory();
+  });
+  Register(apollo::common::CH,
+           []() -> AbstractVehicleFactory * { return new ChVehicleFactory(); });
+}
+```
+
+当VehicleFactory类的`CreateVehicle`方法被调用时，"VehicleFactory"会根据输入的汽车品牌，在Map中查找并返回可以生产这种汽车的工厂。
+
+
+
+例如输入汽车品牌为`GE3` ，"VehicleFactory"会返回`Ge3VehicleFactory` ,`Ge3VehicleFactory`继承于`AbstractVehicleFactory` 。
+
+
+
+```c++
+  /**
+   * @brief Creates an AbstractVehicleFactory object based on vehicle_parameter
+   * @param vehicle_parameter is defined in vehicle_parameter.proto
+   */
+  std::unique_ptr<AbstractVehicleFactory> CreateVehicle(
+      const VehicleParameter &vehicle_parameter);
+```
+
+`AbstractVehicleFactory` 工厂会产出一组适用于该品牌车型的产品即`MessageManager`和`Vehiclecontroller`
+
+`modules/canbus/vehicle/ge3/ge3_vehicle_factory.h`
+
+```c++
+std::unique_ptr<VehicleController>
+Ge3VehicleFactory::CreateVehicleController() {
+  return std::unique_ptr<VehicleController>(new ge3::Ge3Controller());
+}
+
+std::unique_ptr<MessageManager<::apollo::canbus::ChassisDetail>>
+Ge3VehicleFactory::CreateMessageManager() {
+  return std::unique_ptr<MessageManager<::apollo::canbus::ChassisDetail>>(
+      new ge3::Ge3MessageManager());
+}
+```
+
+`Ge3VehicleFactory` 最终会生产处一组适用于该品牌车型的产品，即`VehicleController` 和 `MessageManager`
+
+### 4.Canbus组件
+
+​	最后介绍CANBus模块的CanbusComponent，该类继承于`apollo::cyber::TimerComponent` ，主要作用是处理来自控制模块的控制指令，并将信号消息发送至CAN card。
+
+​	CanbusComponent 的初始化函数（Init）主要完成以下工作：
+
+ 1. 读取Canbus配置文件
+
+    `modules/canbus/conf/canbusconf.pb.txt`
+
+    `modules/canbus/proto/canbus_conf.proto`
+
+    ```c++
+      if (!GetProtoConfig(&canbus_conf_)) {
+        AERROR << "Unable to load canbus conf file: " << ConfigFilePath();
+        return false;
+      }
+    ```
+
+ 2. 根据配置文件初始化`Can-client`
+
+    ```c++
+    can_client_ = can_factory->CreateCANClient(canbus_conf_.can_card_parameter());
+    ```
+
+ 3. 根据配置文件获取汽车工厂
+
+    ```c++
+    VehicleFactory vehicle_factory;
+      vehicle_factory.RegisterVehicleFactory();
+      auto vehicle_object =
+          vehicle_factory.CreateVehicle(canbus_conf_.vehicle_parameter());
+    ```
+
+ 4. 获取该汽车工厂生产的`message_manager` 和 `Vehicle_controller`
+
+    ```c++
+    message_manager_ = vehicle_object->CreateMessageManager();
+    if (can_receiver_.Init(can_client_.get(), message_manager_.get(),
+                             canbus_conf_.enable_receiver_log()) != ErrorCode::OK) {...}
+    if (can_sender_.Init(can_client_.get(), canbus_conf_.enable_sender_log()) !=
+          ErrorCode::OK) {...}
+    vehicle_controller_ = vehicle_object->CreateVehicleController();
+    ...
+    ```
+
+ 5. 使能Can收发和`Vehicle_controller`
+
+    初始化完成后，`CanbusComponent` 会周期性的报告车身状态，并执行来自`Control` 模块和`Guardian`模块的指令。
+
+    ```c++
+    bool CanbusComponent::Proc() {
+      PublishChassis();
+      if (FLAGS_enable_chassis_detail_pub) {
+        PublishChassisDetail();
+      }
+      return true;
+    } //周期性执行
+    
+    
+    //事件触发，Reader回调函数
+    void CanbusComponent::OnControlCommand(const ControlCommand &control_command) {/*...*/}
+    
+    void CanbusComponent::OnGuardianCommand(
+        const GuardianCommand &guardian_command) {
+      apollo::control::ControlCommand control_command;
+      control_command.CopyFrom(guardian_command.control_command());
+      OnControlCommand(control_command);
+    }
+    
+    
+    ```
+
+    
+
+
 
 ### 参考链接
 
@@ -317,6 +468,8 @@ Apollo 中大量采用了这种方式管理配置，Apollo激活车辆的配置�
 > [4]   https://github.com/ApolloAuto/apollo/tree/master/modules/canbus  "canbus"
 >
 > [5]   https://zh.wikipedia.org/wiki/%E5%B7%A5%E5%8E%82%E6%96%B9%E6%B3%95#cite_note-1(https://zh.wikipedia.org/wiki/工厂方法#cite_note-1)   
+>
+> [6] https://zhuanlan.zhihu.com/p/61838008
 
 > [1]: https://www.ibm.com/developerworks/cn/linux/l-cn-gpb/index.html	"protobuf 相关介绍"
 > [2]: https://zhuanlan.zhihu.com/p/61838008	"本文主要参考文章"
