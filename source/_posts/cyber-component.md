@@ -1,16 +1,9 @@
 ---
-title:Component 组件注册过程
-date:
-updated:
-permalink:
+title: Component 组件注册过程
 categories:
+- apollo
 tags:
-mathjax:
-description:
-keywords:
-comments:
-link:
-top:
+- apollo
 ---
 
 
