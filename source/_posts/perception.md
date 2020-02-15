@@ -160,7 +160,7 @@ CYBER_REGISTER_COMPONENT(FusionComponent);
 
   生成的共享库文件由`Cyber RT` 调度程序mainboard动态加载运行。
 
-- DAG配置文件：`perception/production/dag`
+- DAG配置文件(有向无环图)：`perception/production/dag`
 
   DAG配置文件是Cyber RT 调度程序`mainboard` 动态加载`perception` 模块的最终配置文件。
 

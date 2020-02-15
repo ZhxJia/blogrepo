@@ -7,10 +7,8 @@ tags:
 - 感知
 mathjax: true
 ---
-OnReceiveImages()内部函数处理流程:
+### 一、OnReceiveImages()内部函数处理流程:
 <!--more-->
-
-[TOC]
 
 1. 由FusionCameraDetectionComponent::Init()中的InitCameraListeners()创建回调函数
 
@@ -103,9 +101,24 @@ void FusionCameraDetectionComponent::OnReceiveImage(
 > }
 > ```
 >
-> 该函数实现对接收到图像信息的处理，程序前部分实现对`prefused_message`  和 `camera_frame`相关数据参数的赋值,然后运行`camera_obstacle_pipelin_->Perception(&camera_frame)` 
+> 该函数实现对接收到图像信息的处理，程序前部分实现对`prefused_message`  和 `camera_frame`相关数据与参数的赋值，获取相机到世界坐标系的仿射矩阵
 >
-> 主要的处理函数如下
+> ```c++
+> camera2world_trans_wrapper_map_[camera_name]->GetSensor2worldTrans(...);
+> ```
+>
+> 填充图像数据,其中数据来自OnreceiveMessage接收到的消息
+>
+> ```c++
+>   camera_frame.data_provider->FillImageData(
+>       image_height_, image_width_,
+>       reinterpret_cast<const uint8_t *>(in_message->data().data()),
+>       in_message->encoding())
+> ```
+>
+> 有了数据之后，科技进行算法处理了，运行`camera_obstacle_pipelin_->Perception(&camera_frame)` ,实现主要图像算法处理。
+>
+> - `Perception`中主要的处理函数如下
 >
 > > ```c++
 > > bool ObstacleCameraPerception::Perception(
@@ -171,3 +184,78 @@ void FusionCameraDetectionComponent::OnReceiveImage(
    > 
 
 5. Determine CIPV
+
+
+
+### 二、detector and tracker
+
+​	目前发表的相关检测跟踪的算法(ResNet,YOLO等)主要面向广泛的计算机视觉的应用，与自动驾驶领域中的检测和跟踪还是存在一定的区别的，由于汽车行驶在结构化、规则化的道路上，面向的场景更为具体，有很多的几何约束可以用于检测；其次，自动驾驶中的检测模型需要输出的信息更多，包括了障碍物的尺寸、朝向、速度等信息，然而如果以上任务都分别由专用的模块进行处理，则对系统负担较大，处理流程太长，因此还需要做**多任务学习**和网络结构的适配。
+
+​	一个完整的系统除了深度学习模型，还需要做一些后处理，后处理模块针对下游模块，对后续的影响比较直接。在视觉感知中，后处理主要分为三个部分：
+
+​	第一是2D-3D的几何计算，2D到3D的转换需要考虑的因素包括:
+
+> - 相机pose 的影响
+> - 接地点
+> - 稳定性
+
+​	第二是时序信息计算，主要针对跟踪处理，需要注意以下几点：
+
+> - 对相机帧率和延时有要求，要求跟踪必须是一个轻量级的模块，因为检测已经占据了大部分时间
+> - 充分利用检测模型的输出信息（特征、类别等）进行跟踪
+> - 可以考虑轻量级Metric Learning
+
+​	第三是多相机的环视融合
+
+> - 相机布局决定融合策略，要做好视野重叠
+
+
+
+​	检测——>2D to 3D转换 ——>跟踪——>位置、速度
+
+​	HM目标跟踪器的主要功能是跟踪分割步骤检测到的障碍物。通常，它通过将当前检测结果与现有跟踪列表相关联的方式，形成和更新跟踪列表。如果原来的目标都不在出现则删除旧跟踪列表，在确认新的检测结果之后会生成新的跟踪列表。
+
+​	关联之后，将会估计更新后的跟踪列表的运动状态。HM目标跟踪器使用Hungarian算法（匈牙利算法）对检测和跟踪(detection-to-track)进行关联，使用Robust Kalman Filter（鲁棒卡尔曼滤波）进行运动估计。
+
+- 检测到跟踪关联
+
+  将检测与现有的跟踪列表进行关联时，Apollo构建了一个二分图并使用Hungarian算法对检测和跟踪(detection-to-track)进行关联，使用`Robust Kalman Filter` (鲁棒卡尔曼滤波器)进行运动估计。
+
+- 计算关联距离矩阵
+
+  首先建立一个关联距离矩阵。一个给定的检测和跟踪之间的距离可以通过一系列关联属性进行计算，这些关联属性包括运动一致性和外观一致性。`HM` 跟踪器中距离计算中使用的一些属性如下所示：
+
+  ​	
+
+  | 关联属性名称       | 评估一致性的说明 |
+  | ------------------ | ---------------- |
+  | location_distance  | 运动             |
+  | direction_distance | 运动             |
+  | bbox_size_distance | 外观             |
+  | point_num_distance | 外观             |
+  | histogram_distance | 外观             |
+
+  
+
+obstacle perdiction
+
+```
+tracker_->Predict()
+```
+
+```c++
+bool OMTObstacleTracker::Predict(const ObstacleTrackerOptions &options,
+                                 CameraFrame *frame) {
+  for (auto &target : targets_) {
+    target.Predict(frame);
+    auto obj = target.latest_object;
+    frame->proposed_objects.push_back(obj->object);
+  }
+  return true;
+}
+```
+
+其中target的结构定义为：
+
+
+
