@@ -1,5 +1,4 @@
 ---
-{}
 title:Component 组件注册过程
 date:
 updated:
@@ -15,7 +14,7 @@ top:
 ---
 
 
-
+<!=more=>
 ```ｃ++
 CYBER_REGISTER_COMPONENT(FusionCameraDetectionComponent);
 ```
