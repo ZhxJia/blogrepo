@@ -6,8 +6,8 @@ tags:
 - apollo
 ---
 
+<!-- more -->
 
-<!=more=>
 ```ｃ++
 CYBER_REGISTER_COMPONENT(FusionCameraDetectionComponent);
 ```
