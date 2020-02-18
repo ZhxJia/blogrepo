@@ -14,7 +14,7 @@ mathjax: true
 ##　KITTI数据集结构
 
 kitti数据集采集方式参考http://www.cvlibs.net/datasets/kitti/setup.php
-<img src="/home/jachin/space/myblog/blog/source/_posts/apollo-detector/passat_sensors_920.png" style="zoom:50%;" />
+<img src="apollo-detector/passat_sensors_920.png" style="zoom:50%;" />
 
 数据集的标签形式：
 <img src="apollo-detector/kitti_label.png" style="zoom:80%;" />
@@ -46,7 +46,7 @@ label描述:
 
 - **3D bounding box描述**
 
-  <img src="/home/jachin/space/myblog/blog/source/_posts/apollo-detector/3d_bbox.png" style="zoom:80%;" />
+  <img src="apollo-detector/3d_bbox.png" style="zoom:80%;" />
 
   ​	对任意相机坐标系下的障碍物3D bbox有9个自由度，因此可以由9个参数表示（中心点$T={\{X,Y,Z}\}$,长宽高$D=\{L,W,H\}$,以及各坐标轴旋转角$R=\{\phi,\varphi,\theta\}$）,等价与3D框的8点描述(需要24个参数)。
 
@@ -60,7 +60,7 @@ label描述:
 
   ​			- 此时，障碍物中心高度与相机高度相当，可简化认为障碍物Z=0
 
-  <img src="/home/jachin/space/myblog/blog/source/_posts/apollo-detector/2dto3d.png" style="zoom:80%;" />
+  <img src="apollo-detector/2dto3d.png" style="zoom:80%;" />
 
   ​	通过成熟的2D障碍物检测算法，可以较准确的得到图像上2D边界框的像素位置($h,w,c_x,c_y$)
 
@@ -99,14 +99,14 @@ label描述:
 
   在训练完成获得上述参数之后，接下来需要考虑如何计算出障碍物里相机的距离，通过内参矩阵和几何学关系，联系图像中3D障碍物大小（像素）和真实3D坐标系下障碍物大小(单位为米)之间的关系。
 
-  ![](/home/jachin/space/myblog/blog/source/_posts/apollo-detector/3dbox.png)
+  ![](apollo-detector/3dbox.png)
 
   通过单视图衡量([single view metrology][http://ieeexplore-ieee-org-s.ivpn.hit.edu.cn:1080/document/791253])来解释此几何关系：任一物体，已知其实际的长宽高、朝向和距离，则它在图像中的具体形状大小唯一确定，反之亦然。（此处，我们通过物体图像尺寸、实际物理尺寸和朝向角推断物体距离）
 
   对于每种障碍物，根据其平均尺寸，建立查询表，覆盖360度yaw角度变化，来映射不同的距离，查询表可以定义单位标尺(例如在图像某个2d位置上，高一米的障碍物在图像上有多高）通过单位标尺对应的像素数目，快速查到车的真实高度。
-
-综上，Apollo中单目相机下的障碍物检测流程为如下图所示，检测速度可达30hz以上。
-![](/home/jachin/space/myblog/blog/source/_posts/apollo-detector/3dobstacle_pipe.png)
+  
+  综上，Apollo中单目相机下的障碍物检测流程为如下图所示，检测速度可达30hz以上。
+  ![](apollo-detector/3dobstacle_pipe.png)
 
 输入单幅图像－》通过网络预测大部分参数－》基于单视图度量方法，预测剩余参数(距离和中心点坐标)
 其中,在车辆颠簸的情况下，相机内参基本不会发生变化，而外参可以借助在线标定(online calibration)得到实时的外参，提高单目测距的准确性。可以通过车道线来校准，两条平行线无穷远处相交，通过车道线信息，可以帮助我们在线调整传感器标定。
@@ -119,11 +119,11 @@ label描述:
 
 ## Apollo中的YOLO3D
 
-![](/home/jachin/space/myblog/blog/source/_posts/apollo-detector/yolo3dr4.png)
+![](apollo-detector/yolo3dr4.png)
 
 
 
-![](/home/jachin/space/myblog/blog/source/_posts/apollo-detector/areaid.png)
+![](apollo-detector/areaid.png)
 
 
 
@@ -138,7 +138,7 @@ Function<<<griddim,blockdim,extern shared memory,GPU stream>>>(param...);
 
 其中中间参数可以控制核函数运行所占用的资源：
 `griddim`为调用的block数，`blockdim`为调用的thread数，后面两个参数分别表示动态定义共享内存大小和可使用的SM处理器数。
-<img src="/home/jachin/space/myblog/blog/source/_posts/apollo-detector/cuda_block.png" style="zoom:50%;" />
+<img src="apollo-detector/cuda_block.png" style="zoom:50%;" />
 
 kernel函数的定义采用`__global__`修饰符修饰。
 
@@ -149,7 +149,7 @@ resize_linear_kernel << < grid, block >> >
           stepwidth, height, width, fx, fy);
 ```
 
-![](/home/jachin/space/myblog/blog/source/_posts/apollo-detector/kenelprogram.png)
+![](apollo-detector/kenelprogram.png)
 
 ## TensorRT
 
@@ -170,9 +170,9 @@ resize_linear_kernel << < grid, block >> >
 `ICudaEngine`类即为Engine，可通过`IBuilder`类方法`buildCudaEngine()`/`buildEngineWithConfig()`返回其指针。
 Engine的运行需要一个运行时的环境，通过`createExecutionContext()`方法为对应的`ICudaEngine`生成一个                     `IExecutionContext`类型的运行环境context。
 
-![](/home/jachin/space/myblog/blog/source/_posts/apollo-detector/tensorrtinfer.png)
+![](apollo-detector/tensorrtinfer.png)
 
-![](/home/jachin/space/myblog/blog/source/_posts/apollo-detector/apollo_tensorrt.png)
+![](apollo-detector/apollo_tensorrt.png)
 
 
 
