@@ -237,11 +237,7 @@ void FusionCameraDetectionComponent::OnReceiveImage(
 
   
 
-obstacle perdiction
-
-```
-tracker_->Predict()
-```
+**(1)tracker->Predict()**
 
 ```c++
 bool OMTObstacleTracker::Predict(const ObstacleTrackerOptions &options,
@@ -255,7 +251,70 @@ bool OMTObstacleTracker::Predict(const ObstacleTrackerOptions &options,
 }
 ```
 
-其中target的结构定义为：
+对跟踪列表中的每一个target通过kalman相关模型进行预测，获得新图像中的候选障碍物目标添加到`frame->proposed_objects`中
+
+```c++
+void Target::Predict(CameraFrame *frame) {
+  auto delta_t =
+      static_cast<float>(frame->timestamp - latest_object->timestamp);
+  if (delta_t < 0) {
+    return;
+  }
+  image_center.Predict(delta_t);
+  float acc_variance = target_param_.world_center().process_variance();
+  float delta_t_2 = delta_t * delta_t;
+  float pos_variance = 0.25f * acc_variance * delta_t_2 * delta_t_2;
+  float vel_variance = acc_variance * delta_t_2;
+  world_center.process_noise_(0, 0) = pos_variance;
+  world_center.process_noise_(1, 1) = pos_variance;
+  world_center.process_noise_(2, 2) = vel_variance;
+  world_center.process_noise_(3, 3) = vel_variance;
+  world_center.Predict(delta_t);
+
+  // const position kalman predict
+  world_center_const.process_noise_.setIdentity();
+  world_center_const.process_noise_(0, 0) = vel_variance * delta_t_2;
+  world_center_const.process_noise_(1, 1) =
+      world_center_const.process_noise_(0, 0);
+  world_center_const.Predict(delta_t);
+}
+```
+
+**(2) detector->Detect**
+	根据图像信息(frame)检测障碍物,接口定义如下：
+
+```c++
+  // @brief: detect obstacle from image.
+  // @param [in]: options
+  // @param [in/out]: frame
+  // obstacle type and 2D bbox should be filled, required,
+  // 3D information of obstacle can be filled, optional.
+  virtual bool Detect(const ObstacleDetectorOptions &options,
+                      CameraFrame *frame) = 0;
+```
+
+其中主要进行前向推理过程(inference),apollo支持的推理框架由`Inference`这个协议类确定，并通过"inference_factory"进行对象创建，目前支持：`CaffeNet`、`RTNet`、`RTNetInt8`、`PaddleNet`这几种类型的模型结构。
+
+> RTNet是TensorRT框架生成的模型，TensorRT是高性能的深度学习**推理**优化器，将跨平台的"Tensorflow,caffe,MxNet,Pytorch"等深度学习框架训练好的模型解析后进行统一的部署。
+
+主要检测部分的函数：
+
+```c++
+get_objects_gpu(yolo_blobs_, stream_, types_, nms_, yolo_param_.model_param(),
+                  light_vis_conf_threshold_, light_swt_conf_threshold_,
+                  overlapped_.get(), idx_sm_.get(), &(frame->detected_objects));
+```
+
+其实现位于`region_output.cu`中,最终检测检测结果添加到`frame->detected_objects`,各输入参数含义如下。
+
+`yolo_blobs_`:为yolo前向推断模型结构，blob为一个封装了`SyncedMemory`的包装器，作为图像，特征图的基本计算单元
+`stream_`:由cudaStream_t定义cuda中的流，可以实现一个设备上同时运行多个核函数。
+`types_`:为检测的目标类型;  `nms_`: 为nms的相关参数 ;  `yolo_param_.model_param()`:模型的相关参数(一些阈值)
+`light_vis_conf_threshold_`和`light_swt_conf_threshold_`: vis指visible,swt指swtich 值得是车灯检测的相关阈值
+
+> cuda-c (后缀名`.cu`)方便我们利用GPU并行处理来加速程序的运行速度
+
+
 
 
 
