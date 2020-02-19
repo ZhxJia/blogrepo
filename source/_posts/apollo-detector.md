@@ -1,5 +1,4 @@
 ---
-
 title: Apollo中的detector
 categories:
 - apollo
@@ -8,12 +7,10 @@ tags:
 - detector
 mathjax: true
 ---
-
-
-
+Apollo中Detector的相关结构
 <!-- more -->
 
-##　KITTI数据集结构
+## KITTI数据结构
 
 kitti数据集采集方式参考http://www.cvlibs.net/datasets/kitti/setup.php
 <img src="apollo-detector/passat_sensors_920.png" style="zoom:50%;" />
@@ -126,6 +123,30 @@ label描述:
 
 
 ![](apollo-detector/areaid.png)
+
+
+
+**outout_blobs**
+
+```
+loc_pred
+obj_pred
+cls_pred
+ori_pred
+dim_pred
+brvis_pred
+brswt_pred
+ltvis_pred
+ltswt_pred
+rtvis_pred
+rtswt_pred
+area_id_pred
+vis_pred
+cut_pred
+conv9
+conv10
+conv3_3
+```
 
 
 
