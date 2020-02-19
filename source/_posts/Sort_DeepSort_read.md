@@ -1,3 +1,14 @@
+---
+title: Sort和DeepSort论文阅读笔记
+categories:
+- 论文阅读
+tags:
+- 目标跟踪
+mathjax: true
+---
+
+<!-- more -->
+
 ## Sort和DeepSort论文阅读笔记
 
 ### 概述
