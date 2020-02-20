@@ -201,6 +201,100 @@ Engine的运行需要一个运行时的环境，通过`createExecutionContext()`
 
 
 
+![](apollo-detector/coordination_04.png)
+
+
+
+## Transform
+
+### 成员属性
+
+![](apollo-detector/trans.png)
+
+类成员比较简单，但是内部定义的ObjMapper 类的主要内部成员包括了内参矩阵，图像的宽和高，
+**ry_score_是啥待定** ry是rotation_y的含义 ，以及目标映射参数,每个方向上的方差即位置的不确定度。
+
+![](apollo-detector/trans2.png)
+
+​                   <img src="apollo-detector/trans3.png" style="zoom:80%;" /> <img src="/home/jachin/space/myblog/blog/source/_posts/apollo-detector/trans4.png" style="zoom:90%;" />
+
+还有objMapper的配置参数：
+
+![](/home/jachin/space/myblog/blog/source/_posts/apollo-detector/trans6.png)
+
+ObjectTemplateManager  类中管理了物体类别与尺寸的关联：
+
+![](apollo-detector/trans88.png)
+
+其初始化中主要执行下列文件：
+
+![](apollo-detector/trans66.png)
+
+```c++
+  TemplateMap min_template_hwl_;
+  TemplateMap mid_template_hwl_;
+  TemplateMap max_template_hwl_;
+```
+
+其内部成员变量表示物体类别与对应三个大中小尺寸的对应关系：`object_template.pt`中定义
+
+![](apollo-detector/trans99.png)
+
+
+
+### Transform 过程
+
+具体执行过程，通过循环获取检测到的每一个目标，进行三步处理：
+
+![](/home/jachin/space/myblog/blog/source/_posts/apollo-detector/trans7.png)
+
+- 首先，通过参数输入检测到的目标，相机内参，图像高宽，以及theta_ray(应该是相机到目标的中心射线的角度)。然后为3d bbox的计算准备相关参数，将参数赋值给obj_mapper_options。
+
+  其中进行了函数`MatchTemplates(`base::ObjectSubType sub_type, float *dimension_hwl`)`
+
+  分别获取了当前检测到物体类别所对应的模板，包含了大中小三个尺寸。
+
+  ```c++
+  typedef std::map<base::ObjectSubType, std::vector<float> > TemplateMap;
+  ```
+
+  <img src="/home/jachin/space/myblog/blog/source/_posts/apollo-detector/2.png" style="zoom:50%;" />
+
+  
+
+  ![](apollo-detector/trans234.png)
+
+- 有了上述信息之后，就可以开始3d BBox的处理。
+
+  ```c++
+  // @brief: 3d bbox处理
+  // @param [in]: obj_mapper_options
+  // @param [in/out]: obj_center,dimension_hwl,rotation_y 　其中obj_center未知
+  bool ObjMapper::Solve3dBbox(const ObjMapperOptions &options, float center[3],float hwl[3], float *ry) {
+  	...
+      // call 3d solver
+    bool success =Solve3dBboxGivenOneFullBboxDimensionOrientation(bbox, hwl, ry, center);
+  
+  }
+  ```
+
+  首先检查输入尺寸的合理性。
+
+
+  计算3dbox函数如下,主要就是求解3d bbox的位置即center
+
+  ![](apollo-detector/trans_over.png)
+
+  
+
+  ![](/home/jachin/space/myblog/blog/source/_posts/apollo-detector/trans999.png)
+
+  
+
+
+
+
+
 ## 参考文献
 
 > 1.single view metrology[http://ieeexplore-ieee-org-s.ivpn.hit.edu.cn:1080/document/791253]
