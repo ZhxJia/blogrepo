@@ -295,6 +295,26 @@ ObjectTemplateManager  类中管理了物体类别与尺寸的关联：
 
 
 
+
+
+
+
+-----
+
+分割一下，上面的有时间再补充
+
+![](apollo-detector/trans444.png)
+
+
+
+如果2d bbox 么有被截断（在图像范围内）：
+
+
+
+
+
+
+
 ## 参考文献
 
 > 1.single view metrology[http://ieeexplore-ieee-org-s.ivpn.hit.edu.cn:1080/document/791253]
