@@ -144,8 +144,20 @@ extractor {
 5. 生成假设
 
    ```c++
+   // @brief: 评估新检测目标与targets的相似性
+   // @param [in]: track_objects :该帧检测器新检测到的目标
+   // @param [in/out]: 
+   // 
    GenerateHypothesis(track_objects);
    ```
+
+   其中对应的主要成员变量类型`Hypothesis`的定义为:
+
+   ![](apollo-track/666.png)
+
+   
+
+   
 
 6. 创建新目标
 
