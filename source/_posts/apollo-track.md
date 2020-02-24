@@ -89,7 +89,7 @@ extractor {
    struct TrackObject {
      PatchIndicator indicator; //保存了传感器的名称和目标在帧中的id
      double timestamp;
-     base::BBox2DF projected_box;//由检测得到的原2dbox　经projected_matrix投影得到的bbox 这个矩阵是啥意思不太清楚 narrow to obstacle projected_matrix
+     base::BBox2DF projected_box;//由检测得到的原2dbox　经projected_matrix投影得到障碍物的bbox 这个矩阵是啥意思不太清楚 narrow to obstacle projected_matrix(应该是为了将不同的相机的bbox统一到一个尺度)
      base::ObjectPtr object;
    };
    ```
@@ -122,7 +122,7 @@ extractor {
 
 ### 2D关联算法的实现
 
-1. 计算各帧与当前帧的余弦相似性:
+1. 计算各帧与当前帧的余弦相似性:（第5步target和det_obj的Apperance的匹配分数会用到）
 2. 从已跟踪物体列表中去除最早帧之前的帧中检测到的目标
 3. 根据当前帧的检测物体，得到当前的检测跟踪列表
 
@@ -130,7 +130,7 @@ extractor {
   for(...){
       ...
   	ProjectBox(frame->detected_objects[i]->camera_supplement.box,
-                 frame->project_matrix, &(track_ptr->projected_box));
+               frame->project_matrix, &(track_ptr->projected_box));//图像2dbox投影到障碍物坐标系
   	track_objects.push_back(track_ptr);
   }
   ```
@@ -147,27 +147,120 @@ extractor {
    // @brief: 评估新检测目标与targets的相似性
    // @param [in]: track_objects :该帧检测器新检测到的目标
    // @param [in/out]: 
-   // 
+   // output:target匹配第(frame_id)帧中的第几个检测物(track_object),
+   //        并将该track_object加入到target的tracked_objects中
    GenerateHypothesis(track_objects);
    ```
 
-   其中对应的主要成员变量类型`Hypothesis`的定义为:
+   其中对应的主要成员变量类型`Hypothesis`的定义为:（此为target和object的）
 
    ![](apollo-track/666.png)
 
-   
+   处理函数：
 
-   
+   ![](apollo-track/13.png)
 
-6. 创建新目标
+   得到target与对应det_obj的匹配分数后，根据分数由大到小分配,最终将检测物体(det_obj)加入到匹配分数最高的target的tracked_objects中。
+
+   ```c++
+   target.Add(det_obj); 
+   //将det_obj添加到给定的target的tracked_objects中,并将该target的lost_age清零
+   ```
+
+   除了上面的四个分数，最终score还需要加上不同物体类型切换的代价值。
+
+   ![type_change_cost](apollo-track/10.png)
+
+6. 创建新跟踪目标(target)
 
    ```c++
    int new_count = CreateNewTarget(track_objects);
    ```
 
+   由`track_objects`创建新的跟踪目标的条件有：
+
+   	1. 首先该det_obj与现有的target的匹配分数很小，即该det_obj与现有target匹配失败
+    	2. 该det_obj的box需要是有效的(bbox宽高大于20同时小于图像宽高)
+    	3. 该det_obj的box矩形没有被某个target的bbox覆盖 ,此处target的bbox指tracked_objects中最近检测的bbox
+    	4. 在上述条件都满足的前提下，需满足det_obj的高度大于最小模板的高度,也可以是未知类型(此时高度的模板未知)
+
+7. 超过存活周期(lost_age>5)的target,否则执行(即正常跟踪的target)下列方法，通过`latest_object`进行相应更新.并调用对应的`滤波方法`进行预测
+
+   ```c++
+   target.UpdateType(frame);
+   target.Update2D(frame);
+   ```
+
+   - **UpdateType():**
+
+     对于未丢失检测(lost_age=0)的target:
+
+     1. 计算该target的最近检测目标(latest_object->object)的高度与模板中等尺寸的高度接近程度,接近程度由高斯分布衡量:
+
+     ```c++
+     //~N(mu=1.0,sigma=0.3)  反映了object的box_height与模板中等高度的接近程度
+     float alpha = gaussian(
+             rect.height /
+                 (50 * (kMidTemplateHWL.at(object->sub_type).at(0) + 0.01f)),
+             1.0f, target_param_.type_filter_var());
+     //该target同类型的probs会往上叠加(在不同帧之间)，因为每帧该target都有一个对应的latest_object
+     type_probs[static_cast<int>(object->sub_type)] += alpha; 
+     ```
+
+     根据上述最大的`type_probs`更新target的对应类型
+
+     2. 将上述(alpha, object->size(0), object->size(1),object->size(2))组成4维向量，将此测量量添加到该target的`MaxNMeanFilter world_lwh`及`MeanFilter world_lwh_for_unmovable`中：
+
+     ````c++
+     world_lwh.AddMeasure(size_measurement); //MaxNMeanFilter window=15 根据alpha由大到小
+     world_lwh_for_unmovable.AddMeasure(size_measurement); //测量值的均值和方差
+     ````
+
+     ![MaxNMeanFilter](apollo-track/19.png)
+
+     这一步将得到该target 的15次测量值，按照alpha由大到小排序，并取平均更新3d object size,其中的object为该target的lastest_obj
+
+     ```c++
+         if (object->type == base::ObjectType::UNKNOWN_UNMOVABLE) {
+           object->size =
+               world_lwh_for_unmovable.get_state().block<3, 1>(1, 0).cast<float>();
+         } else {
+           object->size = world_lwh.get_state().block<3, 1>(1, 0).cast<float>();
+         }
+     ```
+
+     > camera:
+     >
+     > 6mm : reliable z is 40(m) ,intrinsic(f) is approximate is 2000(像素)
+     >
+     > 12mm:reliable z is 80(m),instrinsic(f) is approximate si 4000(像素) 
+
+   - **Update2D():** 更新2d box的大小。
+
+     1. 向滤波器中添加测量值,进行滤波计算
+
+        ```c++
+            measurement << rect.width, rect.height;
+            image_wh.AddMeasure(measurement);//一阶低通filter
+            measurement << center.x, center.y;
+            image_center.Correct(measurement);//Kalman_Filter
+        ```
+
+     2. 更新:得到该target最近最近检测物体(latest_object)的projected_box(单位：米)
+
+        ![2d box update](apollo-track/20.png)
+
+   8. 在Association之后通过IOU合并重复的targets
+
+      ```c++
+      CombineDuplicateTargets();
+      ```
+
+      
+
+   9. 对原始的box返回滤波结果
+
    
-
-
 
 ## tracker_->Associate3D(frame):根据3D信息关联
 
