@@ -246,7 +246,7 @@ extractor {
      type_probs[static_cast<int>(object->sub_type)] += alpha; 
      ```
 
-     根据上述最大的`type_probs`更新target的对应类型
+     根据上述最大的`type_probs`更新target的对应目标类型
 
      2. 将上述(alpha, object->size(0), object->size(1),object->size(2))组成4维向量，将此测量量添加到该target的`MaxNMeanFilter world_lwh`及`MeanFilter world_lwh_for_unmovable`中：
 
