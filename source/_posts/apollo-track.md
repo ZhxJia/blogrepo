@@ -135,13 +135,52 @@ extractor {
   }
   ```
 
-4. 校正当前帧检测目标的三维尺寸
+4. 校正当前帧检测目标的三维尺寸，执行了四种校正方式：分别为模板，参考地平面，标定，历史信息
 
-	```c++
-	reference_.CorrectSize(frame); //这个函数挺长的，还没细看明天看
-	```
+  ```c++
+  reference_.CorrectSize(frame); //
+  ```
 
-5. 生成假设
+  - 根据模板的最小最大尺寸校正检测目标的最小最大尺寸。(TypeRefinedBy**Template**)
+
+  - 根据障碍物参考校正检测目标的尺寸,可作为参考的目标类型类`CAR,VAN`,同时还需要一系列附加条件，可详见`ObstacleReference::UpdateReference(...)`
+
+    (1). 根据sensor_name的不同 初始化ground_estiomator,执行`GameraGroundPlaneDetector`类的初始化:
+
+    ```c++
+    SyncGroundEstimator(sensor, frame->camera_k_matrix,
+                              static_cast<int>(img_width_),
+                              static_cast<int>(img_height_));
+    ```
+
+    该函数实际上执行`GameraGroundPlaneDetector`类的初始化,有相机内参相关参数初始化
+
+    ```c++
+    ground_estimator.Init(k_mat, img_width, img_height, common::IRec(fx));
+    ```
+
+    (2). 
+
+    ```c++
+    ground_estimator.GetGroundModel(l)
+    ```
+
+    通过相机pitch和相机height(通过calibration获取)获取平面$$a*X+b*Y+c*Z+d=0$$ （相机坐标系）
+
+  - 通过标定服务校正高度h
+
+  - 通过历史参考校正高度h
+
+  
+
+  
+
+  ![template](apollo-track/21.png)
+
+>
+> 此处矫正的三维尺寸在后面的`Transform`部分是否也被采用
+
+1. 生成假设
 
    ```c++
    // @brief: 评估新检测目标与targets的相似性
@@ -171,7 +210,7 @@ extractor {
 
    ![type_change_cost](apollo-track/10.png)
 
-6. 创建新跟踪目标(target)
+2. 创建新跟踪目标(target)
 
    ```c++
    int new_count = CreateNewTarget(track_objects);
@@ -250,17 +289,56 @@ extractor {
 
         ![2d box update](apollo-track/20.png)
 
-   8. 在Association之后通过IOU合并重复的targets
+   8. 在Association之后通过IOU合并重复的targets(可能是不同相机得到的)
 
       ```c++
       CombineDuplicateTargets();
       ```
 
+      - 对目前的targets_两两之间计算其各自含有的tarcked_objects之间的IOU以及box宽和高的差异，计算得到score (此处计算的tracked_object要求他们的时间戳之差小于0.05，同时来自不同传感器)
+
+        ```c++
+        score += common::CalculateIOUBBox(box1, box2); 
+        ...
+        score -= std::abs((rect1.width - rect2.width) *
+                                      (rect1.height - rect2.height) /
+                                      (rect1.width * rect1.height));
+        ```
+
+        将最终平均得分作为这两个`target`之间的相似程度，并将结果保存到score_list中(包括了两个target的索引及其得分)
+
+      - 按照得分从大到小排序依次匹配，可以看出这一步骤与`OMTObstacleTracker::GenerateHypothesis()`相似不同的是我们这里要删除匹配成功的两个target中`id`大的那个,并将删除的那个target_del中的tracked_obj转移到target_save中。
+
+        ```c++
+            if (targets_[pair.target].id > targets_[pair.object].id) {
+              index1 = pair.object;
+              index2 = pair.target;
+            }
+            Target &target_save = targets_[index1];
+            Target &target_del = targets_[index2];
+            for (int i = 0; i < target_del.Size(); i++) {
+              // no need to change track_id of all objects in target_del
+              target_save.Add(target_del[i]);
+            }
+        ```
+
+        并将target_save(target的引用)中的tracked_objects按照帧id(frame id)由小到大排序，并更新lastest_object。
+
+        ```c++
+            std::sort(
+                target_save.tracked_objects.begin(), target_save.tracked_objects.end(),
+                [](const TrackObjectPtr object1, const TrackObjectPtr object2) -> bool {
+                  return object1->indicator.frame_id < object2->indicator.frame_id;
+                });//将targe_save中的tracked_objects按照帧的id由小到大排序
+            target_save.latest_object = target_save.get_object(-1);
+        ```
+
+        然后将target_del中的tracked_objects给清零，最后调用`ClearTargets()`即可将`targets_`多余的target清除掉(将target从后往前填空)
+
+   9. 对经过滤波处理的box(单位：米)映射回图像坐标系（像素）
       
 
-   9. 对原始的box返回滤波结果
-
-   
+      ​	
 
 ## tracker_->Associate3D(frame):根据3D信息关联
 
