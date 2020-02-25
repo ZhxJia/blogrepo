@@ -302,6 +302,18 @@ detector_init_options.gpu_id = perception_param_.gpu_id();//将proto文件参数
 
 `modules/perception/production/data/perception/..`中，包含了各个传感器及其对应的功能模块的配置文件
 
+--------------------
+
+## 文件调用结构
+
+![](perception/fusion_init.png)
+
+
+
+
+
+----------
+
 
 
 ## 目前待解决的问题：
