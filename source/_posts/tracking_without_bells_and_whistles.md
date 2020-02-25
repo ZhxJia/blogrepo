@@ -32,9 +32,9 @@ FasterRCNN特征图每个点有9个anchor,而RPN实际就是在原图像的尺�
 5. 再次利用步骤4中训练好的RPN网络，收集proposals，对应rpn_test.pt
 6. 第二次训练Fast RCNN网络，对应stage2_fast_rcnn_train.pt
 
-<img src="C:\Users\jia_z\Desktop\blogrepo\source\_posts\tracking_without_bells_and_whistles\23.jpg" style="zoom:80%;" />
+<img src="tracking_without_bells_and_whistles\23.jpg" style="zoom:80%;" />
 
-<img src="C:\Users\jia_z\Desktop\blogrepo\source\_posts\tracking_without_bells_and_whistles\66.jpg" style="zoom:30%;" />
+<img src="tracking_without_bells_and_whistles\66.jpg" style="zoom:30%;" />
 
 > 参考链接：
 >
