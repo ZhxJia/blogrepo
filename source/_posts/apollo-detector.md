@@ -220,7 +220,7 @@ Engine的运行需要一个运行时的环境，通过`createExecutionContext()`
 
 还有objMapper的配置参数：
 
-![](/home/jachin/space/myblog/blog/source/_posts/apollo-detector/trans6.png)
+![](apollo-detector/trans6.png)
 
 ObjectTemplateManager  类中管理了物体类别与尺寸的关联：
 
@@ -246,7 +246,7 @@ ObjectTemplateManager  类中管理了物体类别与尺寸的关联：
 
 具体执行过程，通过循环获取检测到的每一个目标，进行三步处理：
 
-![](/home/jachin/space/myblog/blog/source/_posts/apollo-detector/trans7.png)
+![](apollo-detector/trans7.png)
 
 - 首先，通过参数输入检测到的目标，相机内参，图像高宽，以及theta_ray(应该是相机到目标的中心射线的角度)。然后为3d bbox的计算准备相关参数，将参数赋值给obj_mapper_options。
 
@@ -258,7 +258,7 @@ ObjectTemplateManager  类中管理了物体类别与尺寸的关联：
   typedef std::map<base::ObjectSubType, std::vector<float> > TemplateMap;
   ```
 
-  <img src="/home/jachin/space/myblog/blog/source/_posts/apollo-detector/2.png" style="zoom:50%;" />
+  <img src="apollo-detector/2.png" style="zoom:50%;" />
 
   
 
@@ -287,7 +287,7 @@ ObjectTemplateManager  类中管理了物体类别与尺寸的关联：
 
   
 
-  ![](/home/jachin/space/myblog/blog/source/_posts/apollo-detector/trans999.png)
+  ![](apollo-detector/trans999.png)
 
   
 
@@ -313,7 +313,11 @@ ObjectTemplateManager  类中管理了物体类别与尺寸的关联：
 
 
 
+------
 
+### 总体流程图：
+
+![](apollo-detector/Transform.png)
 
 ## 参考文献
 
