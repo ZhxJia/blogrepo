@@ -15,7 +15,7 @@ Apollo中障碍物后处理
 
 ## 对检测到的障碍物进行后处理的条件
 
-- bbox位于roi区域内
+- bbox位于roi区域内(位于这一区域的其更容易投影到地平面)
 - 障碍物的中心距离相机中心大于阈值(30)
 
 <img src="apollo-obstacle-postprocess/IMG_0299.jpg" style="zoom:30%;" />
@@ -114,7 +114,6 @@ bool ObjPostProcessor::PostProcessObjWithGround(
   A*umcx+B*vmcy+C=-\frac{D}{Z}
   $$
   
-
 - **PostRefineCenterWithGroundBoundary**硬约束--
 
   该函数通过`line_segs`(内部存储了当前帧检测物体的2D框信息),
@@ -129,9 +128,9 @@ bool ObjPostProcessor::PostProcessObjWithGround(
   //该函数主要处理流程如下：
   ```
 
-  GetDxDzForCenterFromGroundLineSeg
+  GetDxDzForCenterFromGroundLineSeg 
 
-  先通过平面约束得到2d box 在 3d中的反投影，即将bbox2d中的两个点反投影到了3d平面中。
+  先通过平面约束得到2d box (两点)在 3d中的反投影，即将bbox2d中的两个点反投影到了3d平面中。
 
   将坐标系转为车辆坐标系
 
@@ -141,4 +140,35 @@ bool ObjPostProcessor::PostProcessObjWithGround(
 
   
 
+  
+  
+  ```c++
+  template <typename T>
+  void UpdateOffsetZ(T x_start, T z_start, T x_end, T z_end,
+                     const std::pair<T, T> &range, T *z_offset) {
+    CHECK(range.first < range.second);
+    if (x_start > x_end) {
+      std::swap(x_start, x_end);
+      std::swap(z_start, z_end);
+    }
+  
+    T x_check_l = std::max(x_start, range.first);
+    T x_check_r = std::min(x_end, range.second);
+    T overlap_x = x_check_r - x_check_l;
+    if (overlap_x < 1e-6) {
+      return;
+    }
+  
+    T dz_divide_dx = (z_end - z_start) * common::IRec(x_end - x_start);
+    T z_check_l = z_start + (x_check_l - x_start) * dz_divide_dx;
+    T z_check_r = z_start + (x_check_r - x_start) * dz_divide_dx;
+    T z_nearest = std::min(z_check_l, z_check_r);
+    if (z_nearest < *z_offset) {
+      *z_offset = z_nearest;
+    }
+  }
+  ```
+  
+  
+  
   

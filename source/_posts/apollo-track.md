@@ -344,10 +344,81 @@ extractor {
 
 ## tracker_->Associate3D(frame):根据3D信息关联
 
+### 1. 更新reference
+
+```c++
+reference_.UpdateReference(frame,targets_);
+```
+
+其中包含的数据结构有：
+
+```c++
+struct Reference {
+  float area = 0.0f; //box的面积
+  float k = 0.0f;    //object.H/box.h
+  float ymax = 0.0f; //box的bottom right
+};//可参考的Target（CAR,VAN）所对应的属性
+```
+
+`Obstacle_reference`类中的主要参数:主要含义是`ref_map_`中存储了`reference_`对应元素的索引，即ref_map_中各个位置存储了索引，索引对应于`reference _`中的的对应Reference属性。
+
+![](apollo-track/22.png)
+
+参数的相关默认值：
+
+![](apollo-track/27.png)
+
+**`ObstacleReference::Init`的初始化中执行的操作：**
+	将图像下采样(ref_width\_=width/25,ref_height\_=height/25),将init_ref_map的大小设置为(ref_height\_,ref_width_)的大小.然后对`init_ref_map`进行初始化,`init_ref_map`是一个嵌套vector结构,只对ref图像的下半部分处理，去除边缘，然后将这一部分区域的`init_ref_map`置为0，如蓝色区域所示。
+
+![](apollo-track/24.png)
+
+![](apollo-track/26.png)
+
+**`Reference update`中更新Reference中的相关参数**
+
+- `reference_`中的所有reference的area每次更新衰减0.98
+- ​    对于每个target中最近检测到的物体，如果是可以参考的类型(CAR,VAN)，同时其box的高度大于50，box的底边位置大于内参矩阵中的c_y(即box尽可能位于图像底部),此时该target可以被参考。将该box的底边中心点也进行下采样(y_discrete=y/25,x_discrete=x/25),这样可以与`ref_map`的尺寸对应。
+  ​    如果此中心点所对应的`ref_map`为0(即该点对应的参考图第一次被使用)，将其对应的Reference信息push到数组`reference_`中存储，并将`ref_map`中对应位置置为当前`refs`存储的元素数(即将refs中对应的索引存储到ref_map的对应位置中);否则，若该点对应的ref_map大于零(表示该点已经存在某个物体，其中存储的值为当时的`refs`中对应的索引)，同时此时box的area大于之前存在的reference的area，则将属性进行替换。
+
+**通过reference检测Ground**	
+
+​	首先对于目前`refs`存储的所有`reference`，将其对应的box底边位置（y_max）以及深度`z_ref`存储到`vd_samples`中,当reference的数量大于`min_nr_samples=6`时，可进行Ground的检测(需要在线标定的相机Pitch角度和相机离地平面的高度)
+
+![](apollo-track/28.png)
+
+**DetetGround:**
+
+若给定了相机坐标系下的平面，则由$Ax+By+Cz+D=0 -> a*y+b*disp+c=0$ : ground4->ground3:
+
+![](apollo-track/29.png)
+
+否则根据Samples获取
+
+**基于RANSAC随机一致性采样的鲁棒方法**
 
 
 
+### 2. 移除异常的移动
 
+ 首先根据其位置信息，移除异常移动的target，并将这些target的最新检测目标创建新的target,同时更新这些新创建的target的2D和类型信息(通过相应的滤波器更新当前状态)
 
+![](apollo-track/30.png)
+
+然后对target进行三维信息更新(target.Update3D),更新的状态有:
+
+> FirstOrderRCLowPassFilter direction
+>
+> MeanFilter world_center_for_unmovable;
+>
+> KalmanFilterConstVelocity world_center;
+>
+> KalmanFilterConstState<2> world_center_const; // constant position kalman state
+>
+> MeanFilter world_velocity;
+>
+> MeanFilter displacement_theta;//位移方向
+
+主要处理得到了`速度、位置和朝向`
 
 ## tracker_->Track(frame):跟踪算法
