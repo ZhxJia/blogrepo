@@ -413,7 +413,7 @@ ground3与ground4的对应关系如上图所示，通过采样{y_max,1/z}即边�
    两个功能函数：
 
   - ```c++
-    template <typename T>  //a*y+b*disp + c = 0->disp = p0*y+p1
+    template <typename T>  //a*y+b*disp + c = 0->disp = p0*y+p1 通过采样点建立模型
     void GroundHypoGenFunc(const T *v, const T *d, T *p) {
       // disp = p0 * y + p1 -> l = {p0, -1, p1}
       T x[2] = {v[0], d[0]};
@@ -426,7 +426,7 @@ ground3与ground4的对应关系如上图所示，通过采样{y_max,1/z}即边�
     ```
 
   - ```c++
-    template <typename T>
+    template <typename T> //平面拟合 代价函数
     void GroundFittingCostFunc(const T *p, const T *v, const T *d, int n,
                                int *nr_inlier,  // NOLINT compatible for i-lib
                                int *inliers,
@@ -453,11 +453,60 @@ ground3与ground4的对应关系如上图所示，通过采样{y_max,1/z}即边�
 
   ```c++
   common::RobustBinaryFitRansac<float, 1, 1, 2, 2,
-                                       GroundHypoGenFunc<float>,
-                                       GroundFittingCostFunc<float>, nullptr>(
+                                GroundHypoGenFunc<float>,
+                                GroundFittingCostFunc<float>, nullptr>(
             vs, ds, count_vd, p, &nr_inliers, inliers, kThresInlier, false, true,
             0.99f, kMinInlierRatio)
   ```
+
+  ```c++
+  //内部主要处理过程
+  bool RobustBinaryFitRansac(...)
+  {
+     ...
+     int nr_trials = IRansacTrials(s, confidence, inlierprob);//获取Ransac尝试次数 (此处是16)
+      while (nr_trials > sample_count) {
+          IRandomSample(indices, s, n, &rseed); //随机采样 从[0,n)中每次采2个索引
+          ...
+          HypogenFunc(samples_x, samples_xp, tmp_model); //通过两个采样点获取模型参数
+          ...
+          //通过其他样本数据，验证获取的模型参数，计算代价 error_tol=KThresInlier判断内点的阈值
+          CostFunc(tmp_model, x, xp, n, &nr_inliers, inliers + n, &cost, error_tol);
+      	if ((nr_inliers > *consensus_size) ||
+          	(nr_inliers == *consensus_size && cost < best_cost)) {
+        	*consensus_size = nr_inliers; //目前匹配的最多的内点数
+        	best_cost = cost;
+        	ICopy(tmp_model, model, k); //将匹配内点数最多的模型导出
+          // record inlier indices 将匹配最多的模型的内点索引记录
+        	ICopy(inliers + n, inliers, *consensus_size);  
+        	if (adaptive_trial_count) { //自适应尝试
+          	tmp_inlierprob = IDiv(static_cast<double>(*consensus_size), n);
+          	if (tmp_inlierprob > actual_inlierprob) {
+            		actual_inlierprob = tmp_inlierprob;
+                  //调整(任意一个点为内点)的概率，以此调整trial次数
+            		nr_trials = IRansacTrials(s, confidence, actual_inlierprob);
+          }
+        }
+      }
+      }
+                                           
+  }
+  ```
+
+- **ILineFit2dTotalLeastSquare**:最小二乘拟合
+  最后根据这些内点进行最小二乘拟合,得到平面$a*y+b*disp + c = 0\ -> p0*y - disp +p1=0$
+
+  ```c+++
+  common::ILineFit2dTotalLeastSquare(vd, l_best, count);
+  ```
+
+-  **GetGroundPlanePitchHeight()**:将ground3平面转换为相机坐标系下的ground4,并得到相机高度(height)和角度(pitch):
+  ![](/home/jachin/space/myblog/blog/source/_posts/apollo-track/31.png)
+
+- **GroundPlaneTracker()**
+  构造函数： 注意到tracker的存储是从后往前添加(低索引存储新值)
+
+  ![](apollo-track/32.png)
 
   
 
