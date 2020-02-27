@@ -171,4 +171,10 @@ bool ObjPostProcessor::PostProcessObjWithGround(
   
   
   
+  参考文献：基于车载单目图像的3维地平面估计_向文辉
   
+  ![](apollo-obstacle-postprocess/66.png)
+  
+  
+  
+  ![](apollo-obstacle-postprocess/67.png)

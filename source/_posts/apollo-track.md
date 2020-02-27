@@ -378,12 +378,21 @@ struct Reference {
 **`Reference update`中更新Reference中的相关参数**
 
 - `reference_`中的所有reference的area每次更新衰减0.98
+
 - ​    对于每个target中最近检测到的物体，如果是可以参考的类型(CAR,VAN)，同时其box的高度大于50，box的底边位置大于内参矩阵中的c_y(即box尽可能位于图像底部),此时该target可以被参考。将该box的底边中心点也进行下采样(y_discrete=y/25,x_discrete=x/25),这样可以与`ref_map`的尺寸对应。
   ​    如果此中心点所对应的`ref_map`为0(即该点对应的参考图第一次被使用)，将其对应的Reference信息push到数组`reference_`中存储，并将`ref_map`中对应位置置为当前`refs`存储的元素数(即将refs中对应的索引存储到ref_map的对应位置中);否则，若该点对应的ref_map大于零(表示该点已经存在某个物体，其中存储的值为当时的`refs`中对应的索引)，同时此时box的area大于之前存在的reference的area，则将属性进行替换。
+  
+  ```c++
+  r.area = box.Area();
+  r.ymax = y;
+  r.k = obj->size[2] / (y - box.ymin); // H/h
+  ```
+  
+  
 
 **通过reference检测Ground**	
 
-​	首先对于目前`refs`存储的所有`reference`，将其对应的box底边位置（y_max）以及深度`z_ref`存储到`vd_samples`中,当reference的数量大于`min_nr_samples=6`时，可进行Ground的检测(需要在线标定的相机Pitch角度和相机离地平面的高度)
+​	首先对于目前`refs`存储的所有`reference`，将其对应的box底边位置（y_max）以及深度倒数`1/z_ref`存储到`vd_samples`中,当reference的数量大于`min_nr_samples=6`时，可进行Ground的检测(需要在线标定的相机Pitch角度和相机离地平面的高度)
 
 ![](apollo-track/28.png)
 
@@ -393,11 +402,98 @@ struct Reference {
 
 ![](apollo-track/29.png)
 
-否则根据Samples获取
+<img src="apollo-track/IMG_0304.jpg" style="zoom:30%;" />
+
+否则根据之前的存储的`reference`进行地平面的检测,`CameraGroundPlaneDetector::DetectGroundFromSamples()`
+
+ground3与ground4的对应关系如上图所示，通过采样{y_max,1/z}即边界框下边界和深度的倒数即可通过一致性采样得到模型参数。
+
+- **RobustBinaryFitRansac()**
+
+   两个功能函数：
+
+  - ```c++
+    template <typename T>  //a*y+b*disp + c = 0->disp = p0*y+p1
+    void GroundHypoGenFunc(const T *v, const T *d, T *p) {
+      // disp = p0 * y + p1 -> l = {p0, -1, p1}
+      T x[2] = {v[0], d[0]};
+      T xp[2] = {v[1], d[1]};
+      T l[3] = {0};
+      common::ILineFit2d(x, xp, l);
+      p[0] = -l[0] * common::IRec(l[1]);
+      p[1] = -l[2] * common::IRec(l[1]);
+    }
+    ```
+
+  - ```c++
+    template <typename T>
+    void GroundFittingCostFunc(const T *p, const T *v, const T *d, int n,
+                               int *nr_inlier,  // NOLINT compatible for i-lib
+                               int *inliers,
+                               T *cost,  // NOLINT
+                               T error_tol) {
+      *cost = static_cast<T>(0.0f);
+      *nr_inlier = 0;
+      const T *refx = v;
+      const T *refp = d;
+      for (int i = 0; i < n; ++i) {
+        T d_proj = refx[0] * p[0] + p[1];
+        T proj_err = static_cast<T>(fabs(d_proj - refp[0]));
+        if (proj_err < error_tol) {
+          inliers[(*nr_inlier)++] = i;
+          *cost += proj_err;
+        }
+        ++refx;
+        ++refp;
+      }
+    }
+    ```
+
+  以此为模板参数执行：
+
+  ```c++
+  common::RobustBinaryFitRansac<float, 1, 1, 2, 2,
+                                       GroundHypoGenFunc<float>,
+                                       GroundFittingCostFunc<float>, nullptr>(
+            vs, ds, count_vd, p, &nr_inliers, inliers, kThresInlier, false, true,
+            0.99f, kMinInlierRatio)
+  ```
+
+  
+
+--------
+
+
+
+> 在机器人领域中，平面检测有多种方法，例如：
+>
+> Plane segment finder:algorithm, implementation and applications[C].中采用了霍夫变换方法；
+> Learning compact 3D models of indoor and outdoor environments with a mobile robot中通过随机选择3D点，并在其周围区域增长的方式查找最大点集拟合平面参数；
+> Automatic 3D building reconstruction using plane-roof structures中通过随机一致性采样方法找到局部多边形并合并。
 
 **基于RANSAC随机一致性采样的鲁棒方法**
 
+通过ransac算法不断的对平面方程参数进行估算，先介绍一下RANSAC算法:
 
+RANSAC通过反复选取数据中的一组随机子集来达成目标，被选取的子集被假设为局内点，并通过下属方法进行验证：
+	(1) 有一个模型适用于假设的局内点，及所有未知参数都能从假设的局内点中计算得出（**拟合模型**）
+	(2) 用（1）中得到的模型去测试其他的数据，如果某个点适用于估计的模型(距离小于阈值)，认为它也是局内点。
+	(3) 如果有足够多的点被归类为假设的局内点，则估计的模型就足够合理。
+	(4) 然后，用所有假设的局内点重新估计模型，因为它仅仅被初始的假设局内点估计过。
+	(5) 最后根据估计局内点与模型的错误率来评估模型。
+
+这个过程重复执行固定次数，每次产生的模型要么因为局内点太少而被舍弃，要么因为它比现有的模型更好而被采用。
+
+相比于最小二乘采用了所有点，RANSAC仅采用局内点进行模型的计算，局外点并不影响模型效果。
+
+对于平面的拟合基本步骤如下:
+	(1) 随机取样：随机抽取数据作为样本
+	(2) 拟合模型：根据样本获取模型参数M
+	(3) 判断距离: 判断所有数据点到模型的距离，将距离小于阈值的加入局内点，记录此时模型的局内点数
+	(4) 判断：局内点数目>阈值，则利用此时的局内点重新估计模型，重复3-5次，将得到的局内点数最多的模型即为当前					的最佳模型；局内点数目<阈值,   则跳出
+	(5) 跳到步骤(1)，循环N次
+
+### 2. 移除异常的移动
 
 ### 2. 移除异常的移动
 
