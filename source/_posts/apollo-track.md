@@ -501,7 +501,7 @@ ground3与ground4的对应关系如上图所示，通过采样{y_max,1/z}即边�
   ```
 
 -  **GetGroundPlanePitchHeight()**:将ground3平面转换为相机坐标系下的ground4,并得到相机高度(height)和角度(pitch):
-  ![](/home/jachin/space/myblog/blog/source/_posts/apollo-track/31.png)
+  ![](apollo-track/31.png)
 
 - **GroundPlaneTracker()**
   构造函数： 注意到tracker的存储是从后往前添加(低索引存储新值)
