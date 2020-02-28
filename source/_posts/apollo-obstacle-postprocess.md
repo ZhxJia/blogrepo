@@ -15,10 +15,10 @@ Apollo中障碍物后处理
 
 ## 对检测到的障碍物进行后处理的条件
 
-- bbox位于roi区域内(位于这一区域的其更容易投影到地平面)
-- 障碍物的中心距离相机中心大于阈值(30)
+- bbox位于roi区域内(位于这一区域的其更容易投影到地平面),roi区域大概如图所示,红色部分
+- 障碍物的中心距离相机中心小于阈值(30)
 
-<img src="apollo-obstacle-postprocess/IMG_0299.jpg" style="zoom:30%;" />
+<img src="apollo-obstacle-postprocess/3.png" style="zoom:70%;" />
 
 ## 后处理的初始参数配置
 
