@@ -119,3 +119,5 @@ DCCRF包含两项：
 
 更多概率图模型的内容可参考：
 [http://www.huaxiaozhuan.com/%E7%BB%9F%E8%AE%A1%E5%AD%A6%E4%B9%A0/chapters/16_CRF.html](http://www.huaxiaozhuan.com/统计学习/chapters/16_CRF.html)
+
+http://bjlkeng.github.io/posts/variational-bayes-and-the-mean-field-approximation/

@@ -161,6 +161,7 @@ Function<<<griddim,blockdim,extern shared memory,GPU stream>>>(param...);
 
 其中中间参数可以控制核函数运行所占用的资源：
 `griddim`为调用的block数，`blockdim`为调用的thread数，后面两个参数分别表示动态定义共享内存大小和可使用的SM处理器数。
+
 <img src="apollo-detector/cuda_block.png" style="zoom:50%;" />
 
 kernel函数的定义采用`__global__`修饰符修饰。
@@ -258,7 +259,7 @@ ObjectTemplateManager  类中管理了物体类别与尺寸的关联：
   typedef std::map<base::ObjectSubType, std::vector<float> > TemplateMap;
   ```
 
-  <img src="apollo-detector/2.png" style="zoom:50%;" />
+  <img src="C:\Users\jia_z\Desktop\Apollo_note\image\transform3.png" style="zoom:50%;" />
 
   
 
@@ -317,7 +318,7 @@ ObjectTemplateManager  类中管理了物体类别与尺寸的关联：
 
 ### 总体流程图：
 
-![](apollo-detector/Transform.png)
+![](C:\Users\jia_z\Desktop\Apollo_note\image\transform2.png)
 
 ## 参考文献
 
