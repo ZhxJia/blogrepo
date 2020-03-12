@@ -259,7 +259,7 @@ ObjectTemplateManager  类中管理了物体类别与尺寸的关联：
   typedef std::map<base::ObjectSubType, std::vector<float> > TemplateMap;
   ```
 
-  <img src="C:\Users\jia_z\Desktop\Apollo_note\image\transform3.png" style="zoom:50%;" />
+  <img src="apollo-detector\trans8.png" " />
 
   
 
@@ -318,7 +318,7 @@ ObjectTemplateManager  类中管理了物体类别与尺寸的关联：
 
 ### 总体流程图：
 
-![](C:\Users\jia_z\Desktop\Apollo_note\image\transform2.png)
+![](apollo-detector\Transform.png)
 
 ## 参考文献
 

@@ -16,7 +16,7 @@ CUDA编程基础知识
 - 网格又可以分为许多线程块(block),一个线程块里面有很多线程，这是第二个层次
 - wrap：32个线程为一组，这是第三个层次。
 
-其中grid和block都是定义为dim3类型的变量，dim3可以视为包含三个无符号整数(x,y,z)成员的解耦固体白能量，在定义时，缺省值为1，因此grid和block可以灵活的定义为1-dim,2-dim,3-dim。
+其中grid和block都是定义为dim3类型的变量，dim3可以视为包含三个无符号整数(x,y,z)成员的结构变量，在定义时，缺省值为1，因此grid和block可以灵活的定义为1-dim,2-dim,3-dim。
 
 定义的grid和block如下所示，kernel在调用时也必须通过执行配置的`<<<grid,block>>>`来指定kernel所使用的线程数及结构，需要注意的是不同的GPU架构，grid和block的维度有限制。
 
@@ -32,7 +32,7 @@ kernel_func<<<grid,block>>>(prams...);
 
 ## CUDA内置变量
 
-- 一个线程需要两个内置的坐标变量（`blockIdx,threadIdx`）来唯一标识，它们都是dim3类型变量，其中blockIdx知名线程所在的grid中的位置，而threadIdx指明线程所在的block中的位置：
+- 一个线程需要两个内置的坐标变量（`blockIdx,threadIdx`）来唯一标识，它们都是dim3类型变量，其中blockIdx指明线程所在的grid中的位置，而threadIdx指明线程所在的block中的位置：
 - 其中`threadIdx`包含三个值：`threadIdx.x,threadIdx.y,threadIdx.z`
 - `blockIdx`同样包含三个值：`blockIdx.x,blockIdx.y,blockIdx.z`
 
