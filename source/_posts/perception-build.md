@@ -60,7 +60,9 @@ glog的使用
 
 https://www.cnblogs.com/JZ-Ser/articles/7909800.html
 
+gtest的使用
 
+https://www.cnblogs.com/coderzh/archive/2009/04/06/1426755.html
 
 blob
 
@@ -70,7 +72,9 @@ https://cloud.tencent.com/developer/article/1394880
 
 
 
+并发编程
 
+https://chenxiaowei.gitbook.io/cpp_concurrency_in_action/1.0-chinese
 
 计算confidence处存在的问题
 
