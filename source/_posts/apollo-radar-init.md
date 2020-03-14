@@ -128,8 +128,28 @@ Apollo中毫米波雷达的初始化相关配置
    其中主要包括了以下几个部分：
 
    - **hdmap**输入初始化
-     首先需要判断全局标志位`FLAGS_obs_enable_hdmap_input`是否设置为true,然后进行hdmap_input的初始化
-
+     首先需要判断全局标志位`FLAGS_obs_enable_hdmap_input`是否设置为true,然后进行`hdmap_input`的初始化，
+   初始化配置文件亦通过`ConfigManager`加载`hdmap_input.config`:
+     
+     ```c++
+     model_configs {
+         name: "HDMapInput"
+         version: "1.0.0"
+         integer_params {
+             name: "hdmap_sample_step"
+             value: 1
+         }
+     
+         string_params {
+             name: "hdmap_file"
+     #        value: "/home/caros/adu_data/map/base_map.bin"
+             value: "/apollo/modules/map/data/sunnyvale_big_loop/base_map.bin"
+         }
+     }
+     ```
+     
+     里面包含了`hdmap_file`路径，然而程序里貌似使用的是`modules/common/configs/config_gflag.cc`中的路径,然后加载对应`hdmap`中的信息,用于后续的`roi_filter`
+     
    - **preprocessor** 预处理模块初始化
      该算法组件的接口文件位于`../radar/lib/interface/base_preprocessor.h`中，用于校正`radar`原始的障碍物输出信息。
 
@@ -152,9 +172,9 @@ Apollo中毫米波雷达的初始化相关配置
      > 注意Apollo中感知部分的全局标志位设置位于`../onboard/common_flags_common_flags.cc`
    >
      > 默认启用HdMap:`DEFINE_bool(obs_enable_hdmap_input, true, "enable hdmap input for roi filter");`
-     
 
    
+
 
    - **perception**感知模块初始化
      该算法组件的接口文件位于`../radar/lib/interface/base_radar_obstacle_perception.h`中，用于校正`radar`感知主体算法。
