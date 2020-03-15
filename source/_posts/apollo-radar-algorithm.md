@@ -211,6 +211,8 @@ bool Detect(const drivers::ContiRadar& corrected_obstacles,
   不同坐标系下角速度或线速度的相互转换需要乘上对应的旋转矩阵，因此由于`radar`直接得到的是目标相对`radar`的相对速度，需要将其检测目标的速度转换到(东-北-天)坐标系下,首先得到`radar`在(东-北-天)坐标系下由于车辆角速度引起的旋转：
 
   ```c++
+  rotation_novatel << 0, -angular_speed(2), angular_speed(1), angular_speed(2),
+        0, -angular_speed(0), -angular_speed(1), angular_speed(0), 0; //角速度矢量的反对称阵
   rotation_radar = radar2novatel.topLeftCorner(3, 3).inverse() *
                                      rotation_novatel *
                                      radar2novatel.topLeftCorner(3, 3);
@@ -221,7 +223,16 @@ bool Detect(const drivers::ContiRadar& corrected_obstacles,
   ```
 
   `radar_object->velocity = vel_temp`
-  **这个地方理解还有问题**
+  **注意线速度等于角速度叉乘失径，此处叉乘通过矩阵相乘实现，即为:**
+  $$
+  \vec{a}\times\vec{b}=
+  \begin{bmatrix}
+  0&-a_3&a_2\\
+  a_3 & 0 &-a_1\\
+  -a_2 & a_1 & 0
+  \end{bmatrix}\vec{b}\triangleq a^{\land}\vec{b}
+  $$
+  
 
 - 将`corrected_obstacles`中的横纵向距离和速度的标准差(`dist_rms/vel_res`)作为位置和速度不确定度：
   `radar_object->center_uncertainty = radar2world_rotate * dist_rms * dist_rms.transpose() * radar2world_rotate.transpose()`
@@ -251,4 +262,88 @@ bool Detect(const drivers::ContiRadar& corrected_obstacles,
 - 根据原检测信息中的`obstacle_class`确定目标的类别。
 
 - 根据原检测信息中的`length`,`width`确定目标的长度和宽度，因为`radar`无法检测高度信息，将此值设置为车辆模板 2m ,同时对于物体类别未知的点`CONTI_POINT`，将size设置为1.0m 。
-- 最后根据相对`radar`的物体的x,y坐标，计算距离$local\_range\sqrt{(x^2+y^2)}$ ，即角度$local\_angle = arctan(y/x)$作为radar检测目标的补充参数。
+
+- 最后根据相对`radar`的物体的x,y坐标，计算距离$local\_range\sqrt{(x^2+y^2)}$ ，即角度$local\_angle = arctan(y/x)$作为radar检测目标的补充参数`radar_supplement`。
+
+### RoiFilter(HdmapRadarRoiFilter)
+
+```c++
+
+// @brief: fliter the objects outside the ROI 过滤出roi区域之外的物体
+// @param [in]: options.(hdmap_input信息)
+// @param [in / out]: origin total objects / the objects in the ROI.
+bool RoiFilter(const RoiFilterOptions& options,
+                 base::FramePtr radar_frame) override;
+```
+
+若`roimap`中存在有效信息，该函数根据目前检测物体的中心点坐标判断是否位于roi 的`road` 或者`juction`的polygons中,若目标中心点位于ROI的polygons中，则将该物体添加到`valid_objects`中。
+
+### Track()
+
+```c++
+// @brief: 
+// @param [in]: options.
+// @param [in]: detected_frame(the objects in the ROI)
+// @param [in / out]: tracked_frame (被跟踪物体的信息)
+bool Track(const base::Frame &detected_frame, const TrackerOptions &options,
+             base::FramePtr tracked_frame)
+```
+
+- **TrackObjects(detected_frame)** 获取跟踪目标tracks
+
+  首先跟踪目标的基本信息单位由封装`object`的`RadarTrack`定义，而该单元的删除和创建由封装了`RadarTrack`的`RadarTrackManager`管理(获取,改变,添加,删除track)，算法的具体由`ContiArsTracker`实现。
+
+  (1) **获取当前跟踪的物体** GetTracks() 
+
+  (2) **匹配** matcher_->Match
+  由hm_matcher进行检测物体与跟踪物体的关联。
+
+  ```c++
+   // @brief match radar objects to tracks
+    // @params[IN] radar_tracks: global tracks
+    // @params[IN] radar_frame: current radar frame
+    // @params[IN] options: matcher options for future use
+    // @params[OUT] assignments: matched pair of tracks and measurements
+    // @params[OUT] unassigned_tracks: unmatched tracks
+    // @params[OUT] unassigned_objects: unmatched objects
+    // @return nothing
+    virtual bool Match(const std::vector<RadarTrackPtr> &radar_tracks,
+                       const base::Frame &radar_frame,
+                       const TrackObjectMatcherOptions &options,
+                       std::vector<TrackObjectPair> *assignments,
+                       std::vector<size_t> *unassigned_tracks,
+                       std::vector<size_t> *unassigned_objects) {
+      return true;
+    }
+  ```
+
+  方法是首先由于radar原始输出信息中包含了object_id(注意原始radar信息同一id不一定是同一物体)，但是作为一项判断依据，即进行`IDMatch`的匹配，同时还要求object和track的距离小于一定阈值,其中$c_2$ $c_1$分别表示object和track的中心点位置,$f()=\sqrt{x^2+y^2+z^2}$
+  $$
+  0.5*f\{(c_2-(c_1+v_1\times\triangle t))\}+0.5*f\{(c_1-(c_2+v_2\times\triangle t))\}<2.5m
+  $$
+  满足上述两个条件将对应索引的object关联到track中保存到`assignments`，并将未匹配的object或track的索引保存到
+  `unassigned_objects`和`unassigned_tracks`中。
+
+  然后将剩下的未分配的object和track建立`association_matrix`通过`gated_hungarian_matcher`进行进一步匹配，并将索引保存到`assignments`中，将此时未分配的`track`和`object`索引分别保存到`unassigned_tracks`和
+  `assigned_objects`中。
+
+  (3) **更新已匹配的tracks** `UpdateAssignedTracks`
+  	将已经有了新的匹配的tracks信息更新到当前新检测的object,更新信息包括目标的中心位置(x,y)速度($v_x,v_y$),时间戳，如果采用`Adaptive_Kalman_filter`,则先经过卡尔曼滤波器的校正然后再更新信息,最后将`tracked_times`加1,以及跟踪的生命周期`tracking_time_+=time_diff`
+
+  (4) **更新未匹配的tracks** `UpdateUnassignedTracks`
+  	对于所有未匹配`object`的`track`，判断其与当前帧的时间戳之差是否大于0.06s(即超过0.06s未有检测匹配),若是则将其`SetDead`,当然，若此未分配的`track`是一个空壳(没有跟踪目标信息),也将其设置为`dead`。
+
+  (5) **删除跟丢的tracks** `DeleteLostTracks`
+  	判断当前所有的`tracks`，若其`is_dead`则将其从`tracks`列表中删除。
+
+  (6) **创建新的track** `CreateNewTracks`
+  	对于剩下的未分配的`object`,将其创建新的`track`加入到`tracks`中。
+
+- **CollectTrackedFrame(tracked_frame)** 将`RadarTrack`数据类型中的对应数据转换到`Frame`数据结构中
+
+  (1) **跟踪确认** `ConfirmTrack`
+  	对于`tracked_times>=3`的track,即有超过三次匹配到`object`，则认为是有一定可靠度的进行下一步处理
+
+  (2) **添加到tracked_frame** 
+  	将`RadarTrack`中的对应信息复制到`tracked_frame`帧数据结构中，以进行传输。
+
