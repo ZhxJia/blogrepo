@@ -322,3 +322,16 @@ Apollo中毫米波雷达的初始化相关配置
 
 2. `conti_radar_canbus_component`初始化程序
 
+   通过`conti_radar.dag`注册组件类`conti_radar_canbus_component`，其中组件类的参数配置文件为
+   `radar_front(rear)_conf.pb.txt`。
+   
+
+   (1)首先，通过配置文件中的`can_card_parameter`初始化对应的`can_client`,创建对应的`can_client`实例。
+   (2)然后，创建该节点的writer和reader,这里包含两类：
+
+   - 节点消息发布radar数据:`node_->CreateWriter<ContiRadar>(conti_radar_conf_.radar_channel())`
+   - 节点消息接收定位信息:`pose_reader_ = node_->CreateReader<LocalizationEstimate>()`对应的回调函数为`PoseCallback()`
+
+   (3)创建`ContiRadar`消息管理管理器`sensor_message_manager`,并管理radar配置文件和已创建的`can_client`。
+   (4)通过`can_client`和`sensor_message_manager`初始化创建`can_receiver`用于接受can信息。
+
