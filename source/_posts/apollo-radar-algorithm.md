@@ -233,7 +233,6 @@ bool Detect(const drivers::ContiRadar& corrected_obstacles,
   \end{bmatrix}\vec{b}\triangleq a^{\land}\vec{b}
   $$
   
-
 - 将`corrected_obstacles`中的横纵向距离和速度的标准差(`dist_rms/vel_res`)作为位置和速度不确定度：
   `radar_object->center_uncertainty = radar2world_rotate * dist_rms * dist_rms.transpose() * radar2world_rotate.transpose()`
   `radar_object->velocity_uncertainty =`radar2world_rotate * vel_rms * vel_rms.transpose() *`  
@@ -299,25 +298,25 @@ bool Track(const base::Frame &detected_frame, const TrackerOptions &options,
   由hm_matcher进行检测物体与跟踪物体的关联。
 
   ```c++
-   // @brief match radar objects to tracks
-    // @params[IN] radar_tracks: global tracks
-    // @params[IN] radar_frame: current radar frame
-    // @params[IN] options: matcher options for future use
-    // @params[OUT] assignments: matched pair of tracks and measurements
-    // @params[OUT] unassigned_tracks: unmatched tracks
-    // @params[OUT] unassigned_objects: unmatched objects
-    // @return nothing
-    virtual bool Match(const std::vector<RadarTrackPtr> &radar_tracks,
-                       const base::Frame &radar_frame,
-                       const TrackObjectMatcherOptions &options,
-                       std::vector<TrackObjectPair> *assignments,
-                       std::vector<size_t> *unassigned_tracks,
-                       std::vector<size_t> *unassigned_objects) {
+  // @brief match radar objects to tracks
+  // @params[IN] radar_tracks: global tracks
+  // @params[IN] radar_frame: current radar frame
+  // @params[IN] options: matcher options for future use
+  // @params[OUT] assignments: matched pair of tracks and measurements
+  // @params[OUT] unassigned_tracks: unmatched tracks
+  // @params[OUT] unassigned_objects: unmatched objects
+  // @return nothing
+  virtual bool Match(const std::vector<RadarTrackPtr> &radar_tracks,
+                     const base::Frame &radar_frame,
+                     const TrackObjectMatcherOptions &options,
+                     std::vector<TrackObjectPair> *assignments,
+                     std::vector<size_t> *unassigned_tracks,
+                     std::vector<size_t> *unassigned_objects) {
       return true;
-    }
+  }
   ```
 
-  方法是首先由于radar原始输出信息中包含了object_id(注意原始radar信息同一id不一定是同一物体)，但是作为一项判断依据，即进行`IDMatch`的匹配，同时还要求object和track的距离小于一定阈值,其中$c_2$ $c_1$分别表示object和track的中心点位置,$f()=\sqrt{x^2+y^2+z^2}$
+  方法是首先由于radar原始输出信息中包含了object_id(注意原始radar信息同一id不一定是同一物体)，但是作为一项判断依据，即进行`IDMatch`的匹配，同时还要求object和track的距离小于一定阈值,其中$c_2$ $c_1$分别表示object和track的中心点位置,$f(c)=\sqrt{x^2+y^2+z^2}$
   $$
   0.5*f\{(c_2-(c_1+v_1\times\triangle t))\}+0.5*f\{(c_1-(c_2+v_2\times\triangle t))\}<2.5m
   $$
@@ -346,4 +345,103 @@ bool Track(const base::Frame &detected_frame, const TrackerOptions &options,
 
   (2) **添加到tracked_frame** 
   	将`RadarTrack`中的对应信息复制到`tracked_frame`帧数据结构中，以进行传输。
+
+
+
+## Radar algorithm supplement
+
+### 1.Adaptive Kalman Filter
+
+`radar`或`camera`在进行目标检测时，由于外界环境的突然变化(光照，路面剧烈波动，上下坡等)导致传感器的检测精度受到影响，由于传统的KalmanFilter的更新依赖于先验的量测噪声协方差阵$R$和过程噪声协方差阵$Q$,那么此时传感器检测受到影响，而`Q,R`却并没有改变，即此时系统模型不准确，那么KalmanFilter的结果必然是存在问题的。
+对于自适应卡尔曼滤波，
+
+状态向量:
+$$
+X=
+\begin{bmatrix}
+c_x\\
+c_y\\
+v_x\\
+v_y
+\end{bmatrix}
+$$
+状态转移矩阵:
+$$
+F=
+\begin{bmatrix}
+1 & 0 & \triangle t & 0\\
+0 & 1 & 0 & \triangle t \\
+0 & 0 & 1 & 0\\
+0 & 0 & 0 & 1
+
+\end{bmatrix}
+$$
+过程噪声协方差矩阵：
+$$
+Q=
+\begin{bmatrix}
+0.074 & 0 & 0 & 0\\
+0 & 0.074 & 0 & 0 \\
+0 & 0 & 0.074 & 0\\
+0 & 0 & 0 & 0.074
+\end{bmatrix}
+$$
+量测噪声协方差矩阵：根据radar返回的横纵向速度和位置的标准差rms计算得到世界坐标系下的协方差。
+
+```c++
+dist_rms(0, 0) = radar_obs.longitude_dist_rms(); //纵向距离的标准差
+    dist_rms(1, 1) = radar_obs.lateral_dist_rms(); //横向距离标准差
+    vel_rms(0, 0) = radar_obs.longitude_vel_rms(); //纵向速度的标准差
+    vel_rms(1, 1) = radar_obs.lateral_vel_rms(); //横向速度标准差
+    radar_object->center_uncertainty =
+        (radar2world_rotate * dist_rms * dist_rms.transpose() *
+         radar2world_rotate_t) //世界坐标系下的协方差(R*rms)(R*rms)^T
+            .cast<float>();
+
+radar_object->velocity_uncertainty =
+    (radar2world_rotate * vel_rms * vel_rms.transpose() *
+     radar2world_rotate_t)
+    .cast<float>();
+```
+
+$$
+R=
+\begin{bmatrix}
+c_{x\ uncertainty} & 0 & 0 & 0\\
+0 & c_{y\ uncertainty} & 0 & 0 \\
+0 & 0 & v_{x\ uncertainty} & 0\\
+0 & 0 & 0 & v_{y\ uncertainty}
+\end{bmatrix}
+$$
+
+**预测部分**:
+$$
+x'=Fx\\
+P'=FPF^T+Q
+$$
+**更新部分**:
+首先根据该帧检测物体的位置速度的不确定性协方差阵更新`R`
+
+```c++
+  r_matrix_.topLeftCorner(2, 2) =
+      new_object.center_uncertainty.topLeftCorner(2, 2).cast<double>();
+  r_matrix_.block<2, 2>(2, 2) =
+      new_object.velocity_uncertainty.topLeftCorner(2, 2).cast<double>();
+```
+
+$$
+y = z-Hx'\\
+S = HP'H^T+R\\
+K=P'H^TS^{-1}\\
+x=x'+Ky\\
+P=(I-KH)P'(I-KH)^T+KRK^T
+$$
+
+其中$P=(I-KH)P'(I-KH)^T+KRK^T$与$P=(I-KH)P'$等价，但是能够保证正定性。
+
+<img src="apollo-radar-algorithm/1.jpg" style="zoom:50%;" />
+
+可以看出毫米波雷达的卡尔曼滤波相较于传统的滤波器，**在于其`R`阵会根据`radar`提供的标准差实时更新**。
+
+### 2. GatedHungarianMatcher
 
