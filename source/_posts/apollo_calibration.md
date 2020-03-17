@@ -252,6 +252,8 @@ struct CameraStatus {
 ## 参考文章
 
 > [1]崔洪柳. 基于车道线检测的车载摄像机在线标定算法[D].东北大学,2015.
+>
+> https://gitchat.blog.csdn.net/article/details/94420885
 
 
 
