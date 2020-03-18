@@ -107,7 +107,23 @@ roi_width: 1920
 
 #### 2.1 Detect
 
+- 准备图像数据
+  首先对原始图像(`1920*1080`)进行裁剪，得到ROI图像，(`1920*1080`)->(`1920*768`)
 
+  由于`DarkSCNN`网络结构输出为`640*480`,所以还需要`resize,`通过GPU实现图像大小的转换。
+
+  ```c++
+  // @brief: 通过GPU对每个像素并行处理，获取
+  // @param [in]:
+  // @param [in]: 
+  // @param [in]: perception_param_:上面参数配置文件的相关信息
+  inference::ResizeGPU(
+        image_src_, input_blob, static_cast<int>(crop_width_), 0,
+        static_cast<float>(image_mean_[0]), static_cast<float>(image_mean_[1]),
+        static_cast<float>(image_mean_[2]), false, static_cast<float>(1.0));
+  ```
+
+  
 
 
 
@@ -247,13 +263,30 @@ struct CameraStatus {
 
 
 
+
+
+## supplement material
+
+网络结构
+
+
+
+
+
+
+
+
+
+
 ---
 
 ## 参考文章
 
 > [1]崔洪柳. 基于车道线检测的车载摄像机在线标定算法[D].东北大学,2015.
 >
-> https://gitchat.blog.csdn.net/article/details/94420885
+> 多传感器标定：https://gitchat.blog.csdn.net/article/details/94420885
+>
+> 传感器标定: https://blog.csdn.net/m0_38087936/article/details/88536345
 
 
 
