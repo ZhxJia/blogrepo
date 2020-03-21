@@ -400,7 +400,7 @@ struct CalibratorOptions {
                           float *velocity);
   ```
 
-- `LaneBasedCalibrator::Process()`
+- `LaneBasedCalibrator::Process()` 计算pitch_estimation,vanishing_row
 
   ```c++
   // @brief: Main function. process every frame, return true if get valid
@@ -409,24 +409,52 @@ struct CalibratorOptions {
   // @param [in]: velocity(相机世界坐标系下的速度)
   // @param [in]: yaw_rate(相机世界坐标系下yaw变化率)
   // @param [in]: time_diff(两帧之间的时间差) 
+  // @out : pitch_estimation_, vanishing_row_
+  
   bool Process(const EgoLane &lane, const float &velocity,
-               const float &yaw_rate, const float &time_diff);
+             const float &yaw_rate, const float &time_diff);
   ```
-
+  
   - `IsTravelingStraight()`判断当前yaw变化率是否小于3°，即判断是否直线行驶，若不为直线行驶，则不进行处理,return false。
+  
   - `GetVanishingPoint()`根据ego Lane车道线获取消失点`vp_cur`
     - `SelectTwoPointsFromLineForVanishingPoint(egoleftline/rightline)` 使用ego line的部分(或全部)线段，返回线段的起止索引。
     - `GetIntersectionFromTwoLineSegment()`使用上面的车道线线段获取消失点，即计算两条直线延长线的交点。
       ref:https://stackoverflow.com/questions/563198/how-do-you-detect-where-two-line-segments-intersect
+    
   - `PushVanishingPoint()`将`vp_cur`添加到`vp_buffer_`中，`vp_buffer_`中最大容量1000，最先检测到的位于最后
+  
   - `PopVanishingPoint()`计算`vp_buffer`累计前行的距离，判断是否大于最低前行距离要求(20m),若满足则将末尾（最新）的消失点提出来使用->`vp_work`
+  
   - `GetPitchFromVanishingPoint()`根据`vp_work`估计相机`Pitch`角度->`pitch_cur_`
-    空间中一条直线的消失点是一条与该直线平行且经过相机光心的射线与像平面的交点。
+    空间中一条直线的消失点是一条与该直线平行且经过相机光心的射线与像平面的交点,由于车道线与地平面水平，因此可计算pitch(与地平面夹角)
+    
+  - `AddPitchToHistogram()`将pitch_cur添加到hist中。
+  
+    - `HistogramEstimator::Push(pitch_cur_)`,首先需要注意用于标定的直方图参数的设置是在
+      `CalibratorParams::Init()`中，通过将(-10,10°)区间平分为400份，然后计算输入的`pitch_cur_`所在区间的位置，并将该位置的计数值加1`hist_[index]++`。(直方图的数据分组数量为bin)
+  
+  - `HistogramEstimator::Process()` 当累计前行距离大于100m时，进行标定值的更新，流程可以概括为：
+    ` smooth -> get peak & check mass -> shape analysis -> update estimate -> final decay`。
+  
+    - `Smooth(hist,nr_bins,hist_smoothed)` hist为之前添加的pitch角度计数，nr_bins为数据分组数量。原统计的直方图存在锯齿状波动，对直方图通过核<1,3,5,3,1>进行平滑以方便确定波峰和波谷。`hist_smoothed`
+  
+    - `GetPeakIndexAndMass(hist_smoothed,nr_bins,max_index,mass)` 获得波峰对应的索引(表示该计算得到的pitch数量最多)以及所有计数值之和`mass`,若`mass`即对应采样点的个数少于100，则缺少足够数据。
+  
+    - `IsGoodShape(hist,nr_bins,max_index)`，对应于初始化时的先验`hist_hat_`判断当前的直方图形状是否正常
+      $$
+      hist\_hat(i)=e^{-\frac{(x-200)^2}{2\sigma ^2}}\ i\in[0,400],\sigma=6.25
+      $$
+      <img src="C:\Users\jia_z\Desktop\blogrepo\source\_posts\apollo_calibration\hist_hat.jpg" style="zoom:30%;" />
+  
+      判断标准$hist(i)>hist(max\_index)\times hist\_hat(i-(max\_index-200))$ 则认为直方图形状**不符合**要求。
+  
+    - `GetValFromIndex(max_index)` 将对应直方图的索引值转换为角度值->`val_estimation`
+    - `Decay(hist,nr_bins)` 将直方图中的技术值逐步衰减 * 0.8908987
 
+> 总的来说，获取各个消失点所要求的最低直行距离为20m,而通过各个消失点计算的pitch角度更新标定值所需最低直行距离为100m,但是需要注意的是，一旦行驶过程中，出现不是直行的状态，则消失点缓存即刻清零，而用于更新标定值的累计前行距离只有到达可更新的阈值才会清零，不会因为没有直行而清零。
 
-
-
-
+通过上述标定得到的pitch角度，校正相机`CameraStatus`
 其中相机状态(camera_status)主要包含以下信息：
 
 ```c++
@@ -437,6 +465,18 @@ struct CameraStatus {
   std::vector<double> k_matrix = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
   std::vector<double> ground_plane = {0.0, 0.0, 0.0, 0.0};
 };
+```
+
+```c++
+	 name_camera_status_map_[master_sensor_name_].pitch_angle = pitch_angle;
+      for (auto iter = name_camera_status_map_.begin();
+           iter != name_camera_status_map_.end(); iter++) {
+        // update pitch angle
+        iter->second.pitch_angle =
+            iter->second.pitch_angle_diff + iter->second.pitch_angle;
+        // update ground plane param
+        iter->second.ground_plane[1] = cos(iter->second.pitch_angle);
+        iter->second.ground_plane[2] = -sin(iter->second.pitch_angle);
 ```
 
 
