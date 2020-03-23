@@ -225,7 +225,7 @@ struct LaneLine {
   	`frame->lane_objects.push_back(cur_object);`
   [5]针对车辆位于左边或者右边的车道线上，修改对应一边的车道线的类型标签。
 
-#### 2.3  Postprocess 3D
+#### 2.3  Postprocess 3D（Process3D之前进行了Calibration Service 中相机状态的更新）
 
 ```c++
   // convert image point to the camera coordinate
@@ -235,8 +235,11 @@ struct LaneLine {
                  CameraFrame* frame) override;
 ```
 
-- `ConvertImagePoint2Camera(frame)`
+- `ConvertImagePoint2Camera(frame)`将车道线坐标转换到相机坐标系
+  利用`Calibration Service`校正过的`pitch`角度，以及相机到地平面的高度`camera_ground_height` 结合内参：
+  - `ImagePoint2Camera(image_point,..) return camera_point3d`,相机高度可用于计算由于距离未知所引入的尺度因子(齐次坐标同时乘以一个系数，坐标不变)
 - `PolyFitCameraLaneLine(frame)` 使用多项式拟合相机坐标系下的车道线
+  - `PolyFit(camera_pos_vec,...) return camera_coeff `  通过QR分解(eigen 3)进行线性最小二乘求解。
 
 
 
@@ -498,7 +501,7 @@ struct CameraStatus {
 
 ## supplement material
 
-网络结构
+网络结构SCNN :https://arxiv.org/pdf/1712.06080.pdf
 
 
 
