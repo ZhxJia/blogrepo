@@ -123,8 +123,8 @@ roi_width: 1920
         static_cast<float>(image_mean_[0]), static_cast<float>(image_mean_[1]),
         static_cast<float>(image_mean_[2]), false, static_cast<float>(1.0));
   ```
-```
-  
+
+
   通过上述程序将图像数据拷贝到了网络模型的输入input_blob中，接下来进行前向推断，获取结果。
 
 - 前向推断`cnnadapter_lane_->Infer()`,获取网络模型输出。
@@ -140,7 +140,7 @@ roi_width: 1920
 
 #### 2.2 Postprocess 2D
 
-​```c++
+```c++
   // @brief: detect lane from image.
   // @param [in]: options
   // @param [in/out]: frame
@@ -225,7 +225,18 @@ struct LaneLine {
   	`frame->lane_objects.push_back(cur_object);`
   [5]针对车辆位于左边或者右边的车道线上，修改对应一边的车道线的类型标签。
 
-#### 2.3 
+#### 2.3  Postprocess 3D
+
+```c++
+  // convert image point to the camera coordinate
+  // & fit the line using polynomial
+  // @param :options(same as process 2D),frame
+  bool Process3D(const LanePostprocessorOptions& options,
+                 CameraFrame* frame) override;
+```
+
+- `ConvertImagePoint2Camera(frame)`
+- `PolyFitCameraLaneLine(frame)` 使用多项式拟合相机坐标系下的车道线
 
 
 
@@ -556,3 +567,13 @@ https://blog.csdn.net/ganguowa/article/details/60765691
 ### 计算两直线交点坐标（车道线消失点）
 
 https://stackoverflow.com/questions/563198/how-do-you-detect-where-two-line-segments-intersect
+
+
+
+### 地平面参数和相机pitch角度之间的关系
+
+```c++
+        iter->second.ground_plane[1] = cos(iter->second.pitch_angle);
+        iter->second.ground_plane[2] = -sin(iter->second.pitch_angle);
+```
+
