@@ -580,3 +580,8 @@ https://stackoverflow.com/questions/563198/how-do-you-detect-where-two-line-segm
         iter->second.ground_plane[2] = -sin(iter->second.pitch_angle);
 ```
 
+
+
+**多传感器标定：**
+
+https://blog.csdn.net/qq_41204464/article/details/102945454

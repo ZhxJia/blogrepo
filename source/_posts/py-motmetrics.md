@@ -391,3 +391,43 @@ mm.distances.iou_matrix(a, b, max_iou=0.5)
 
 ### 直接利用mot数据集格式的检测结果进行衡量
 
+
+
+
+
+
+
+```python
+    'idf1': 'IDF1',
+    'idp': 'IDP',
+    'idr': 'IDR',
+    'recall': 'Rcll',
+    'precision': 'Prcn',
+    'num_unique_objects': 'GT',
+    'mostly_tracked': 'MT',
+    'partially_tracked': 'PT',
+    'mostly_lost': 'ML',
+    'num_false_positives': 'FP',
+    'num_misses': 'FN',
+    'num_switches': 'IDs',
+    'num_fragmentations': 'FM',
+    'mota': 'MOTA',
+    'motp': 'MOTP',
+    'num_transfer': 'IDt',
+    'num_ascend': 'IDa',
+    'num_migrate': 'IDm',
+```
+
+```
+- `'MATCH'` a match between a object and hypothesis was found
+- `'SWITCH'` a match between a object and hypothesis was found but differs from previous assignment (hypothesisid != previous)
+- `'MISS'` no match for an object was found
+- `'FP'` no match for an hypothesis was found (spurious detections)
+- `'RAW'` events corresponding to raw input
+- `'TRANSFER'` a match between a object and hypothesis was found but differs from previous assignment (objectid != previous)
+- `'ASCEND'` a match between a object and hypothesis was found but differs from previous assignment  (hypothesisid is new)
+- `'MIGRATE'` a match between a object and hypothesis was found but differs from previous assignment  (objectid is new)
+```
+
+
+
