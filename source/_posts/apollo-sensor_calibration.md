@@ -206,6 +206,8 @@ python /apollo/modules/tools/sensor_calibration/extract_data.py --config /apollo
 
 当完成上述步骤后，可以将数据提取工具产生的压缩包以及摄像头的内参文件，发给 Apollo 服务团队，完成传感器的标定。https://github.com/ApolloAuto/apollo/blob/master/docs/quickstart/multiple_lidar_gnss_calibration_guide.md
 
+https://login.bce.baidu.com/?redirect=http%3A%2F%2Fconsole.bce.baidu.com%2Fapollo%2Fcalibrator%2Findex%2Flist
+
 <img src="C:\Users\jia_z\Desktop\blogrepo\source\_posts\apollo-sensor_calibration\103354.png" style="zoom: 50%;" />
 
 ### 多传感器数据融合 关系
@@ -222,7 +224,7 @@ python /apollo/modules/tools/sensor_calibration/extract_data.py --config /apollo
 
 参考文件：docs/quickstart/multiple_lidar_gnss_calibration_guide_cn.md
 
-
+参考文件：https://github.com/ApolloAuto/apollo/blob/master/docs/specs/apollo_lidar_imu_calibration_guide.md
 
 
 
