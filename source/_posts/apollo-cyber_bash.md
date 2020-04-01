@@ -172,7 +172,7 @@ cc_binary(
 
 **注意事项：**
 
-- 在注册`service`，`node`时注意不能出现重复的名称
+- 在注册`service`，`node`时 注意不能出现重复的名称
 
 ----
 
@@ -386,13 +386,325 @@ AFATAL << "hello cyber.";
 
 ### 2.5 Building a module based on Component
 
+#### 2.5.1 component
+
+`component`是CyberRT提供用于构建应用模块的基础类。每一个特定功能的应用模块都可以继承`Component`类并定义它们自己的`Init`和`Proc`函数，这样该模块将会被加载到`Cyber`框架中运行。
+
+#### 2.5.2 Binary vs Component
+
+在CyberRT框架下应用有两种配置方式：
+
+- 基于Binary:各个应用模块被分别编译成不同的binary(二进制可执行文件)，然后通过创建各自的`Reader`和`Writer`进行信息交换。
+
+- 基于Component:各个应用模块被编译成shared library。通过继承Component类,并编写相应的dag描述文件,CyberRT框架将会动态的加载运行该应用模块。
+
+  **Component的基本组件接口：**
+
+  - `Init()` 用于算法组件的初始化，是算法组件的入口(相当于各个组件的main)
+  - `Proc()` 当需要的通道信息发布时，Cyber框架将会调用该函数(实际是一个Reader的回调函数)
+
+  **使用Component的优势：**
+
+  - 组件可以通过`launch`文件加载到不同的进程中，部署更加灵活
+  - 组件可以通过修改`dag`文件更改接收通道的名称，而不需要重新编译
+  - 组件支持接收多种类型的数据
+  - 组件支持提供多种融合策略
+
+#### 2.5.3 Dag文件的形式
+
+An example dag file:
+
+```
+# Define all coms in DAG streaming.
+module_config {
+    module_library : "lib/libperception_component.so"
+    components {
+        class_name : "PerceptionComponent"
+        config {
+            name : "perception"
+            readers {
+                channel: "perception/channel_name"
+            }
+        }
+    }
+    timer_components {
+        class_name : "DriverComponent"
+        config {
+            name : "driver"
+            interval : 100
+        }
+    }
+}
+```
+
+- **module_library:** 用于加载`.so`库的路径，其根路径是Cyber的工作路径(与`setup.sh`相同的路径)
+- **components/timer_components:** 选择基础组件类型(是否是定时发布,一般传感器的组件用timer_component)
+- **class_name:** 加载的组件类的名称
+- **name:** 加载的组件类的标识符（同一组件类可能有不同的配置方式，比如16线，64线激光雷达）
+- **readers:** 被当前组件接受的数据(Proc函数中处理)，支持1-3各不同通道的数据
+
+#### 2.5.4 (timer)component example
+
+- common_component_example
+  可以查看`cyber/examples/common_component_example/`中的示例程序
+  头文件基本组成：
+
+  ```c++
+  #include <memory>
+  #include "cyber/class_loader/class_loader.h"
+  #include "cyber/examples/proto/examples.pb.h"
+  
+  using apollo::cyber::examples::proto::Driver;
+  using apollo::cyber::Component;
+  using apollo;:cyber::ComponentBase;
+  
+  class CommontestComponent : public Component<Driver,Driver> {
+      public:
+      	bool Init() override;
+      	bool Proc(const std::shared_ptr<Driver>& msg0,
+                    const std::shared_ptr<Driver>& msg1) override;
+  };
+  CYBER_REGISTER_COMPONENT(Commontestcomponent)  
+  ```
+
+  源文件：
+
+  ```c++
+  #include "cyber/examples/common_component_sample/common_component_example.h"
+  
+  #include "cyber/class_loader/class_loader.h"
+  #include "cyber/component/component.h"
+  
+  bool Commontestcomponent::Init(){
+      AINFO << "Commontest component init";
+      return true;
+  }
+  bool Commontestcomponent::Proc(const std::shared_ptr<Driver>& msg0,
+                                const std::shared_ptr<Driver>& msg1){
+      AINFO << "Start commontest component Proc [" << msg0->msg_id() << "] ["
+          << msg1->msg_id() << "]";
+      return true;
+  }
+  ```
+
+  
+
+- timer_component_example
+  参考`cyber/examples/timer_component_example/`
+  头文件：
+
+  ```c++
+  #include <memory>
+  
+  #include "cyber/class_loader/class_loader.h"
+  #include "cyber/component/component.h"
+  #include "cyber/component/timer_component.h"
+  #include "cyber/examples/proto/examples.pb.h"
+  
+  using apollo::cyber::examples::proto::Driver;
+  using apollo::cyber::Component;
+  using apollo::cyber::ComponentBase;
+  using apollo::cyber::TimerComponent;
+  using apollo::cyber::Writer;
+  
+  class TimertestComponent : public TimerComponent{
+  public:
+  	bool Init() override;
+  	bool Proc() override;
+      
+  private:
+  	std::shared_ptr<Writer<Driver>> driver_writer_ = nullptr;
+  };
+  CYBER_REGISTER_COMPONENT(TimertestComponent)
+  
+  ```
+
+  源文件：
+
+  ```c++
+  #include "cyber/examples/timer_component_example/timer_component_example.h"
+  
+  #include "cyber/class_loader/class_loader.h"
+  #include "cyber/component/component.h"
+  #include "cyber/examples/proto/examples.pb.h"
+  
+  bool TimertestComponent::Init(){
+  	driver_writer_ = node_->CreateWriter<Driver>("/carstatus/channel");
+  	return true;
+  }
+  
+  bool TimertestComponent::Proc(){
+      static int i = 0;
+      auto out_msg = std::make_shared<Driver>();
+      out_msg->set_msg_id(i++);
+      driver_writer_->Write(out_msg);
+      AINFO << "timertestcomponent: Write drivemsg->"
+          <<out_msg->ShortDebugString();
+      return true;
+  }
+  ```
+
+  然后通过bazel编译BUILD文件生成`.so`文件，通过`timer.dag`即可运行组件
+
+需要注意的是：
+
+- 需要注册组件，才能够从通过`SharedLiabray`加载功能类，注册的接口：
+
+  ```c++
+  CYBER_REGISTER_COMPONENT(DriverComponent)
+  ```
+
+  在组件类的头文件的最后添加,如果在注册时使用了`namespace`，那么在dag文件中也要添加对应的`namespace`
+
+- Component和TimerComponent的配置是不同的，不要将它们搞混
+
 ### 2.6 Launch
+
+`cyber_launch`是CyberRT框架的启动程序。它根据`launch`文件启动`mainboards`进程(一个launch文件对应一个进程),并将不同的组件根据dag文件加载到不同的`mainboard`进程中。`cyber_launch`支持动态加载组件或启动二进制文件两种场景。
+launch文件的格式：
+
+```xml
+<cyber>
+	<module>
+    	<name>driver</name>
+        <dag_conf>driver.dag</dag_conf>
+        <process_name></process_name>
+        <exception_handler>exit</exception_handler>
+    </module>
+    <module>
+    	<name>perception</name>
+        <dag_conf>perception.dag</dag_conf>
+        <process_name></process_name>
+        <exception_handler>respawn</exception_handler>
+    </module>
+    <module>
+    	<name>planning</name>
+        <dag_conf>planning.dag</dag_conf>
+        <process_name></process_name>
+    </module>
+</cyber>
+```
+
+**Module:** 每一个被加载的组件或二进制文件都是一个module
+
+- **name** 被加载的模块的名称
+- **dag_conf** 对应组件的dag文件
+- **process_name** 是mainboard开启后对应的进程名称。相同的process_name的组件将会被加载和运行在同一进程中，如果没有设置，将会使用默认的进程。
+- **exception_handler** 是当进程发生异常是的处理方法。值可以是`exit`或者`respawn`，为空则不进行处理。
+  - exit ,当异常发生时整个进程需要停止运行。
+  - respawn，当异常发生时，进程需要重启。
+
+-----
 
 ### 2.7 Timer
 
-### 2.8Time API
+Timer可用于创建定时任务，以定期运行或只运行一次。
+
+#### 2.7.1 Timer Interface
+
+```c++
+ /**
+   * @brief Construct a new Timer object
+   *
+   * @param period The period of the timer, unit is ms
+   * @param callback The tasks that the timer needs to perform
+   * @param oneshot True: perform the callback only after the first timing cycle
+   *                False: perform the callback every timed period
+   */
+  Timer(uint32_t period, std::function<void()> callback, bool oneshot);
+```
+
+另一种构造方法是，先封装Timer的配置参数，然后调用构造函数：
+period对应定时器周期，单位为ms,范围(1~512*64ms),
+callback:对应定时器的回调函数，即周期执行的任务
+oneshot:是否只执行一次
+
+```c++
+struct TimerOption {
+  uint32_t period;                 // The period of the timer, unit is ms
+  std::function<void()> callback;  // The tasks that the timer needs to perform
+  bool oneshot;  // True: perform the callback only after the first timing cycle
+                 // False: perform the callback every timed period
+};
+/**
+ * @brief Construct a new Timer object
+ *
+ * @param opt Timer option
+ */
+explicit Timer(TimerOption opt);
+```
+
+#### 2.7.2 Start Timer
+
+在创建一个Timer实例后，通过`Timer::Start()`来开启定时器
+
+#### 2.7.3 Stop Timer
+
+通过`Timer::Stop()`来手动停止一个已经开启的定时器
+
+**Demo：**
+
+```c++
+#include <iostream>
+#include "cyber/cyber.h"
+int main(int argc,char** argv){
+    cyber::Init(argv[0]);
+    cyber::Timer timer(100,[](){
+        std::cout << cyber::Time::Now() << std::endl;
+    }，false);
+    timer.Start();
+    sleep(1); //单位s
+    Timer.Stop();
+}
+```
+
+-----
+
+### 2.8 Time API
+
+Time是用于管理时间的类（**注意不不同于Timer**），可以用于当前时间的获取，耗时的计算，时间转换等等。
+Time类接口如下：
+
+```c++
+// constructor, passing in a different value to construct Time
+Time(uint64_t nanoseconds); //uint64_t, in nanoseconds
+Time(int nanoseconds); // int type, unit: nanoseconds
+Time(double seconds); // double, in seconds
+Time(uint32_t seconds, uint32_t nanoseconds);
+// seconds seconds + nanoseconds nanoseconds
+Static Time Now(); // Get the current time
+Double ToSecond() const; // convert to seconds
+Uint64_t ToNanosecond() const; // Convert to nanoseconds
+Std::string ToString() const; // Convert to a string in the format "2018-07-10 20:21:51.123456789"
+Bool IsZero() const; // Determine if the time is 0
+```
+
+**Demo:**
+
+```c++
+#include <iostream>
+#include "cyber/cyber.h"
+#include "cyber/duration.h"
+int main(int argc, char** argv){
+	cyber::Init(argv[0]);
+    Time t1(1531225311123456789UL);
+    std::cout << t1.ToString() << std::endl;// 2018-07-10 20:21:51.123456789
+    //duration time interval
+    Time t1(100);
+    Duration d(200);
+    Time t2(300);
+    assert(d == (t2-t1)); //true
+}
+```
+
+-----
 
 ### 2.9 Record flie:Read and Write
+
+#### 2.9.1 Reading the Reader file
+
+**RecordReader**用于组件在Cyber框架下读取消息。每一个RecordReader可以打开一个已经存在的record文件通过该类的`open`方法，线程将异步读取recode文件中的信息。用户仅需要执行`ReadMessage`提取`RecordReader`中的最新信息，然后通过`GetCurrentMessageChannelName`,`GetCurrentRawMessage`,`GetCurrentMessageTime`来获取信息。
+**RecordWriter**用于组件在Cyber框架下记录信息。每一个RecordWriter可以创建一个新的record文件通过`Open`方法。用户通过`WriteMessage`和`WriteChannel`来将`message`和`channel`信息写入到record中。
 
 ### 2.10 C++ API Directory
 
@@ -437,7 +749,7 @@ cyber_monitor -h
 cyber_monitor -c ChannelName
 ```
 
-![](apollo-bash\cyber_monitor.png)
+![](apollo-cyber_bash\cyber_monitor.png)
 
 启动命令行工具后，显示通道名称和通道的数据类型，默认显示为红色，若有数据流经某通道，则通道的相应行显示为绿色。
 
