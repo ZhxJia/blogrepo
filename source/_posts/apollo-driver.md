@@ -230,7 +230,9 @@ message CompressedImage {
 }
 ```
 
-------
+
+
+----
 
 ### 1.3 video_component
 
@@ -357,7 +359,9 @@ module_config {
      image->set_data(&(mat_image.data[0]), size);
    ```
 
-   
+
+
+**注意：** **std::string 与字符数组并不是意味着文本格式，而是将string 作为二进制存储的容器。**
 
 参考：https://blog.csdn.net/qq_37406130/article/details/78820176?depth_1-utm_source=distribute.pc_relevant.none-task&utm_source=distribute.pc_relevant.none-task
 
@@ -411,3 +415,6 @@ UDP socket
 
 https://www.cnblogs.com/HpeMephisto/p/11312193.html
 
+protobuf :序列化与反序列化
+
+https://cloud.tencent.com/developer/article/1176660
