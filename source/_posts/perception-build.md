@@ -1,22 +1,12 @@
 ---
-{}
-title:
-date:
-updated:
-permalink:
-categories:
-tags:
-mathjax:
-description:
-keywords:
-comments:
-link:
-top:
+
+title: apollo编译遇到的一些问题
+
 ---
 
+apollo感知部分编译遇到的一些问题
 
-
-
+<!--more-->
 
 glog cmake 编译的问题
 
