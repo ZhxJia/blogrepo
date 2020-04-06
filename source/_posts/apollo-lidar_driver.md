@@ -122,8 +122,8 @@ rpm: 600.0
 model: VLS128
 mode: STRONGEST
 prefix_angle: 18000
-firing_data_port: 2368  //velodyne socket 接口
-positioning_data_port: 8308 //定位数据 socket结构
+firing_data_port: 2368  //velodyne socket 端口
+positioning_data_port: 8308 //定位数据 socket端口
 use_sensor_sync: false
 max_range: 100.0
 min_range: 0.9
@@ -169,5 +169,24 @@ is_main_frame: true
 - VelodyneDriverComponent::device_poll()
   在线程中，循环执行该函数拉取Lidar数据
   - `VelodyneDriver::Poll(const std::shared_ptr<VelodyneScan>& scan)`
-  - `writer->Write(scan)`
+  - `writer->Write(scan)` 
+    点云数据发布通道`/apollo/sensor/lidar128/Scan`
 
+##　convert(velodyne_convert_component)
+
+```protobuf
+module_config {
+    module_library : "/apollo/bazel-bin/modules/drivers/velodyne/parser/libvelodyne_convert_component.so"
+
+    components {
+      class_name : "VelodyneConvertComponent"
+      config {
+        name : "velodyne_convert"
+        config_file_path : "/apollo/modules/drivers/velodyne/conf/velodyne128_conf.pb.txt"
+        readers {channel: "/apollo/sensor/lidar128/Scan"}
+      }
+    }
+}
+```
+
+接受`driver`组件发布的原始数据，在该组件中转换为点云结构数据。
