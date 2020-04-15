@@ -1,5 +1,5 @@
 ---
-title: apollo lidar算法--segmentaion component
+title: apollo lidar算法--segmentaion component（一）
 tags:
 - lidar目标检测
 categories:
@@ -197,14 +197,27 @@ output_channel_name: "/perception/inner/SegmentationObjects"
           bool Init(const FeatureParam& feature_param, base::Blob<float>* out_blob);
           ```
 
-        - 创建变量`std::vector<int> point2grid_`保存每个点在特征图中的一维索引，空间申请为120000
-
+          创建变量`std::vector<int> point2grid_`保存每个点在特征图中的一维索引，空间申请为120000
+  对应特征图的参数信息为：
+          
+          ```protobuf
+  feature_param {
+              width: 864
+              height: 864
+      point_cloud_range: 90
+              min_height: -5.0
+              max_height: 5.0
+      use_intensity_feature: false
+              use_constant_feature: false
+          }
+          ```
+          
         - `CNNSegmentation::InitClusterAndBackgroundSegmentation()`
           初始化聚类和背景分割方法：
-
+        
           - 初始化地平面检测器`ground detector`
             通过`<BaseGroundDetectorRegister>`接口类创建`<SpatioTemporalGroundDetector>`实现类，然后初始化：`ground_detector_->Init(ground_detector_init_options)`
-
+        
             - `SpatioTemporalGroundDetector::Init(）`
               通过`config manager`和对应的proto获取配置参数，此处直接给出配置文件的内容：
 
@@ -216,23 +229,23 @@ output_channel_name: "/perception/inner/SegmentationObjects"
               roi_rad_y: 120.0
               roi_rad_z: 120.0
               nr_smooth_iter: 5
-              //以上参数为PlaneFitGroundDetectionParam
+      //以上参数为PlaneFitGroundDetectionParam
               use_roi: false
-              use_ground_service: true
+      use_ground_service: true
               ```
-
+        
               通过以上参数初始化`<PlaneFileGroundDetectorParam>`类实例(定义位于common/i_ground)
             
               - `PlaneFitGroundDetectorParam::Validate()` 判断输入参数是否有效
               - 创建`vg_fine_ = new VoxelGridXY<float>()`体素栅格用于对点云数据进行降采样
               - 
             
-          - 初始化`roi filter`
+  - 初始化`roi filter`
             通过`<BaseROIFilter>`接口类创建`<HdmapROIFilter>`实现类然后初始化，用于从点云中提取roi区域的点云：
 
             - `HdmapROIFilter::Init()`通过`config manager`加载配置参数：
-
-              ```protobuf
+        
+      ```protobuf
               #./data/perception/lidar/models/roi_filter/hdmap_roi_filter
               range: 120.0
               cell_size: 0.25
@@ -240,32 +253,32 @@ output_channel_name: "/perception/inner/SegmentationObjects"
               no_edge_table: false
               set_roi_service: true
               ```
-
+  
               通过以上参数创建`<Bitmap2D>`类实例并初始化。
-
+    
           - 初始化`spp engine`
-            获取分割网络的相关输出
-
+        获取分割网络的相关输出
+        
           - 初始化 `thread worker` ,
           若存在HDMap输入，则进行ROIFilter，最终得到`roi_cloud_`和`roi_world_cloud_`
             roifilter之后则进行地平面检测
-            
+        
             ```c++
             ground_detector_->Detect(ground_detector_options, lidar_frame_ref_);
-            ```
-
+        ```
+      
     - 2.1.6  点云分割初始化之后，创建`<ObjectBuilder>`类，用于根据点云创建物体的相关属性。
-
+    
     - 2.1.7 初始化`<ObjectFilterBank>` 用于过滤得到的object,初始化通过`config manager`及对应的proto加载对应的参数：
-
+    
       ```protobuf
       # ./data/perception/lidar/models/object_filter_bank/filter_bank.conf
       filter_name: "ROIBoundaryFilter"
       ```
-
+    
       通过接口类`<BaseObjectFilterRegister>`根据`filter_name`创建类`<ROIBoundaryFilter>`
       对该类进行通过`config mangaer`进行下列参数的加载
-
+    
       ```
       # ./data/perception/lidar/models/object_filter_bank/roi_boundary_filter.conf
       distance_to_boundary_threshold: -1.0
