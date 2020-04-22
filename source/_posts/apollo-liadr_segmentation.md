@@ -257,7 +257,7 @@ output_channel_name: "/perception/inner/SegmentationObjects"
               通过以上参数创建`<Bitmap2D>`类实例并初始化。
     
           - 初始化`spp engine`
-        获取分割网络的相关输出
+        获取分割网络的相关输出用于后处理聚类,相关参数配置见本文最后。
         
           - 初始化 `thread worker` ,
           若存在HDMap输入，则进行ROIFilter，最终得到`roi_cloud_`和`roi_world_cloud_`
@@ -307,11 +307,55 @@ LidarObstacleSegmentation的初始化包括：
 
 ---
 
+参数配置文件及参数配置信息汇总：
 
+**spp_engine:**
 
+| 参数名称         | 默认值（default） | 作用                 |      |
+| ---------------- | ----------------- | -------------------- | ---- |
+| height_gap       | 0.5               |                      |      |
+| confidence_range | 85.0              |                      |      |
+| width            | 864               | 特征图宽             |      |
+| height           | 864               | 特征图高             |      |
+| range            | 90.0              | 特征图对应的范围(米) |      |
 
+**sppdata:**
 
+| 参数名称             | 默认值 | 作用                                       |      |
+| -------------------- | ------ | ------------------------------------------ | ---- |
+| objectness_threshold | 0.5    | 用于过滤无效的cluster                      |      |
+| confidence_threshold | 0.1    | 用于过滤无效的cluster                      |      |
+| top_z_threshold      | 0.5    |                                            |      |
+| class_num            | 5      | 类别数量，用于计算cluster的类别 位于util.h |      |
+| obj_prob_data_ref    |        | 类别概率map(特征图各行首节点的prob地址)    |      |
 
+**feature_generator:**
 
+| 参数名称          | 默认值 | 作用                               |      |
+| ----------------- | ------ | ---------------------------------- | ---- |
+| point_cloud_range | 90     | 点云的范围（米）                   |      |
+| width             | 864    | 构建的特征图网格的宽               |      |
+| height            | 864    | 构建的特征图网格的高               |      |
+| min_height        | -5.0   | 最低高度(米)                       |      |
+| max_height        | 5.0    | 最大高度(米)用于选取特征图中的点云 |      |
 
+**SppCCDetector:**
+
+| 参数名称             | 默认值                     | 作用                         | 类型             |
+| -------------------- | -------------------------- | ---------------------------- | ---------------- |
+| prob_map             | obj_prob_data_ref          | 网络输出的是否是object的概率 | float** [height] |
+| offset_map           | instance_pt_blob的数据指针 | 中心偏移 用于聚类            |                  |
+| scale                | 864/(2x90)                 | 对应尺度，每米对应的格数     |                  |
+| objectness_threshold | 0.5                        | 是目标object的阈值           |                  |
+|                      |                            |                              |                  |
+|                      |                            |                              |                  |
+
+**cnnseg:**
+
+| 参数名称    | 默认值 | 作用                            | 类型 |
+| ----------- | ------ | ------------------------------- | ---- |
+| min_pts_num | 3      | cluster所需要包含的最小点云数量 |      |
+|             |        |                                 |      |
+|             |        |                                 |      |
+|             |        |                                 |      |
 

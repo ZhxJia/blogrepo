@@ -20,7 +20,7 @@ apollo中lidar的分割模型，接上篇初始化之后，本篇主要总结apo
 // @param[in]:LidarObstaclesSegmentationOptions 包括了传感器名称和lidar2novatel的外参
 // @param[in]:PointCloud 接收的原始点云输入数据
 // @param[out]:LidarFrame lidar输出帧信息，包含障碍物识别 跟踪等信息
-LidarProcessResult Process(
+LidarProcessResult LidarObstacleSegmentation::Process(
       const LidarObstacleSegmentationOptions& options,
       const std::shared_ptr<apollo::drivers::PointCloud const>& message,
       LidarFrame* frame);
@@ -161,7 +161,7 @@ LidarProcessResult Process(
                        LidarFrame* frame);
 ```
 
-经过preprocessor和map_manager->update已获得预处理的点云(`cloud`和`world_cloud`)和地图边界信息`HdmapStruct`,此处将填充点云数据帧中的`segmented_objects`。
+经过preprocessor和map_manager->update已获得预处理的点云(`cloud`和`world_cloud`)和地图边界信息`HdmapStruct`,此处将填充点云数据帧中的`segmented_objects`，方法是通过聚类点云形成障碍物。
 
 - **首先**将3d点云映射到2d图像网格中`MapPointToGrid(orginal_cloud_)`
 
@@ -231,6 +231,16 @@ LidarProcessResult Process(
     `max_height_data_,mean_height_data_,top_intensity_data_,mean_intensity_data,count_data_,nonempty_data`
 
     **此处计算的特征图通道数最多为6，再加上初始化时已经填充的`distance_data`和`direction_data`则最多有8个通道的输入特征图，注意max_height,mean_height,count_data，nonempty_data必须之外，在程序中其余特征是通过配置文件参数决定是否使用,程序默认只使用四个必须的通道**
+    计算的8个统计量：
+
+    1. 单元格中点的最大高度
+    2. 单元格中最高点的强度
+    3. 单元格中点的平均高度
+    4. 单元格中点的平均强度
+    5. 单元格中的点数
+    6. 单元格中心相对于原点的角度
+    7. 单元格中心与原点之间的距离
+    8. 二进制值标示单元格是空还是被占用
 
   >  参考论文 [MV3D][https://www.baidu.com/link?url=Ly_VMVTyYOUZVTepDik7Lt6L8YVF1eZjGAYdxX4VsXZH0RRs3jVs3QrLaxGk8W6H&wd=&eqid=ac4db69d0000b034000000025e97375a]中Bird’s Eye View Representation.章节的相关描述，MV3D中以$min(1.0,\frac{log(N+1)}{log(64)})$作为网格密度特征的衡量方式。
 
@@ -238,16 +248,369 @@ LidarProcessResult Process(
   `inference_->Infer()`
   网络模型的输出包括：
   类别得分`class_pt_blob:"class_score"`，置信度得分`confidence_pt_blob:"confidence_score"`
-  实例`instace_pt_blob:"instace_pt"`,分类`category_pt_blob:"category_score"`,朝向`heading_py_blob:"heading_pt"`
+  偏移`instace_pt_blob:"instace_pt"`,分类`category_pt_blob:"category_score"`,朝向`heading_py_blob:"heading_pt"`
   障碍物高度`height_pt_blob:"height_pt"`
   **通过神经网络输出，可以得到每个单元格的CNN预测属性**
+  基于FCNN的预测，Apollo获取了每个单元格的四个预测信息，分别用于之后的障碍物聚类和后处理：
+
+  | 单元格属性           | 单元格属性    | 用途       |
+  | -------------------- | ------------- | ---------- |
+  | 中心偏移             | center offset | 障碍物聚类 |
+  | 对象性(是否为object) | objectness    | 障碍物聚类 |
+  | 可信度(positiveness) | positiveness  | 后处理     |
+  | 对象高度             | object height | 后处理     |
+
+  
+
 - **最后** 进行后处理聚类：
+  `GetObjectsFromSppEngine(&frame->segmented_objects);`
 
+  ```c++
+  // @brief: 后处理实现点云聚类
+  // @param[out]: objects (点云数据帧中的segmented_objects数据)
+  void CNNSegmentation::GetObjectsFromSppEngine(
+      std::vector<std::shared_ptr<Object>>* objects){...}
+  ```
 
+  功能实现类：`<SppEngine>`
 
+  1. 向`SppEngine`的数据结构`<SppData>`中传入点云对应的一维网格索引`grid_indices`，即特征图。
 
+  2. 进行前景分割,对点云进行聚类得到各个物体的cluster
+
+     ```c++
+       // @brief: process foreground segmentation
+       // @param [in]: point cloud (原始点云数据)
+       // @return: size of foreground clusters
+       size_t ProcessForegroundSegmentation(
+           const base::PointFCloudConstPtr point_cloud);
+     ```
+
+     此处 处理的数据结构类为：`<CloudMask>`
+
+     - 调用私有函数在输入网格特征图上进行聚类：
+
+       ```c++
+         // @brief: process clustering on input feature map
+         // @param [in]: point cloud
+         // @param [in]: point cloud mask
+         size_t ProcessConnectedComponentCluster(
+             const base::PointFCloudConstPtr point_cloud, const CloudMask& mask);
+       ```
+
+       - 在该函数中，通过`<SppCCDetector>`这个功能类检测cluster。
+
+         ```c++
+         // @brief: detect clusters
+         // @param [out]: label image
+         // @return: label number 检测到的物体类别标签的数量
+         size_t SppCCDetector::Detect(SppLabelImage* labels) {...}
+         ```
+
+         其中参数 labels 为数据结构类`<SppLabelImage>`
+
+         - `BuildNodes(0,rows_)` 通过给定特征图行数创建`node`矩阵 ，根据网络输出的
+           `category_pt_blob`对应每一个节点是否是object的概率，`instance_pt_blob`对应着每个节点在行和列方向上的偏移（网络的输出为米，需根据scale转换为偏移的网格数），创建节点并设置节点的`is_object`状态。**这里的偏离center offset实际有两层，分别是行方向上的偏移和列方向上的偏移，最终将二者合并成整个特征图的一维索引保存到对应节点的center_node属性中**
+
+         > 这里的`<Node>`数据结构类型包含的是一个16位的数据状态status,表示一个网格节点的状态，将
+         > `node_bank,traversed,is_center,is_object`等属性压缩到这一个uint16数据中,排列如下
+         > `|is_center(1bit)|is_object(1bit)|traversed(3bit)|node_rank(11bit)|`
+
+         - `TraverseNodes()` 遍历创建的节点矩阵，如果节点对应的is_object = 1,构建节点之间的对应关系：
+           遍历is_object=1的节点，根据该节点的center_node偏移不断往下遍历直到遇到已经遍历过的点则停止，将这些点的is_center属性赋值为true。然后将各个遍历过程中经过的节点的traversed属性置为1，并将各个节点的parent属性统一设置为最终(遍历停止)节点的parent(即为网格一维索引)
+
+         - `UnionNodes()`将相邻的节点进行组合。采用压缩的联合查找算法(Union Find algorithm)有效查找连接组件，每个组件都是候选障碍物集群。
+
+           > 参考算法”并查集“
+
+         - `ToLabelMap(labels)` 将障碍物cluster收集到`<SppLabelImage>`中的数据存储结构`<SppCluster>`中，设置label image中各个cluster的标签id，从1开始，将相同根节点的网格(**程序中称为pixel**)添加到同一个cluster中。
+
+       - 然后对获取的到的cluster进行过滤(根据网络输出的confidence_pt_blob,category_pt_blob,以及
+         confidence的阈值默认0.1，objectness的阈值0.5进行判断)
+
+         ```c++
+         // @brief: filter clusters, given confidence map
+         // @param [in]: confidence_map of the same size
+         // @param [in]: confidence threshold
+         void SppLabelImage::FilterClusters(const float* confidence_map,
+                                            const float* category_map,
+                                            float confidence_threshold,
+                                            float category_threshold) 
+         ```
+
+         通过将cluster中所有的pixel对应的confidence或者category的分数和取平均作为cluster的置信度，根据阈值判断是否有效，并对clusters_ 进行过滤，并更新labels_ 中的标签，将无效的cluster的标签置为0(背景)
+
+       - 根据网络输出的class map计算每个cluster的类别
+
+         ```c++
+           // @brief: calculate class for each cluster, given class map
+           // @param [in]: class_map of the same size
+           // @param [in]: class number default:5
+           void SppLabelImage::CalculateClusterClass(const float* class_map, size_t class_num);
+         ```
+
+         默认类别数量是有5类：`UNKNOWN,SAMLLMOT,BIGMOT,NONMOT,PEDESTRIAN` 
+         网络的输出`class_map`共有class_num层,每一层大小为width*height(网格大小)
+
+       - 根据网络输出的heading_data计算每个cluster的朝向
+
+         ```c++
+           // @brief: calculate heading (yaw) for each cluster, given heading map
+           // @param [in]: heading_map of the same size
+           void SppLabelImage::CalculateClusterHeading(const float* heading_map);
+         ```
+
+         网络输出的heading_map 是由x朝向和y朝向两层组成，根据x方向和y方向的位置朝向通过arctan(y/x)计算得到yaw轴角度。
+
+       - 根据网络输出的top_z_map计算cluster的高度
+
+         ```c++
+           // @brief: calculate top_z for each cluster, given top_z map
+           // @param [in]: top_z_map of the same size
+           void SppLabelImage::CalculateClusterTopZ(const float* top_z_map);
+         ```
+
+       - 根据label_image计算的clusters_ 对齐spp_cluster_list中的clusters_，然后向cluster中添加点云中的点的点的信息，即2d->3d
+
+         ```c++
+           // @brief: add an 3d point sample
+           // @param [in]: cluster id
+           // @param [in]: 3d point
+           // @param [in]: point height above ground
+           // @param [in]: point id
+           void SppClusterList::AddPointSample(size_t cluster_id, const base::PointF& point,
+                               	float height, uint32_t point_id);
+         ```
+
+       - 清除空的cluster
+
+         ```c++
+           // @brief: remove empty cluster from clusters
+           void SppClusterList::RemoveEmptyClusters();
+         ```
+
+  3. 进行**背景分割**，首先需要同步线程，然后将roi点云中的高度拷贝到原始点云中，并将原始点云中的标签修改为对应roi_id的`LidarPointLabel::GROUND`，然后移除ground对应的点points。
+
+     ```c++
+       // @brief: remove ground points in foreground cluster
+       // @param [in]: point cloud
+       // @param [in]: roi indices of point cloud
+       // @param [in]: non ground indices in roi of point cloud
+       size_t SppEngine::RemoveGroundPointsInForegroundCluster(
+           const base::PointFCloudConstPtr full_point_cloud,
+           const base::PointIndices& roi_indices,
+           const base::PointIndices& roi_non_ground_indices);
+     ```
+
+  4. 将clusters的相关属性添加到`<object>`数据结构中，例如cluster各个类别的概率和对应的object类型：
+     object中的`UNKNOWN,PEDESTRIAN,BICYLE,VEHICLE`
+     分别对应cluster中的`META_UNKNOW,META_PEDESTRIAN,META_NOMOT,META_SMALLMOT+META_BIGMOT`
+     然后将cluster的朝向信息复制到`<object>`的`theta`,`direction`属性。
+
+----
+
+### 四、 障碍物边框构建
+
+对象构建器组件为检测到的障碍物建立一个边界框。
+接口函数：
+
+```c++
+  // @brief: calculate and fill object size, center, directions.
+  // @param [in]: ObjectBuilderOptions.
+  // @param [in/out]: LidarFrame*.
+  bool ObjectBuilder::Build(const ObjectBuilderOptions& options, LidarFrame* frame);
+```
+
+- 首先对每一个检测得到的物体计算2D多边形凸包：
+
+  ```c++
+    // @brief: calculate 2d polygon.
+    //         and fill the convex hull vertices in object->polygon.
+    // @param [in/out]: ObjectPtr.
+    void ComputePolygon2D(
+        std::shared_ptr<apollo::perception::base::Object> object);
+  ```
+
+  - 计算物体包含点云的最小最大值
+
+    ```c++
+      // @brief: calculate 3D min max point
+      // @param [in]: point cloud.
+      // @param [in/out]: min and max points.
+      void ObjectBuilder::GetMinMax3D(const apollo::perception::base::PointCloud<
+                           apollo::perception::base::PointF>& cloud,
+                       Eigen::Vector3f* min_pt, Eigen::Vector3f* max_pt);
+    ```
+
+    根据该物体包含的点云，得到该点云中x,y,z方向向最小值`min_pt`和最大值`max_pt`。
+
+  - 根据x,y,z方向上的最大值和最小值，计算和填充默认的多边形的属性值
+
+    ```c++
+     // @brief: calculate and fill default polygon value.
+      // @param [in]: min and max point.
+      // @param [in/out]: ObjectPtr.
+      void ObjectBuilder::SetDefaultValue(
+          const Eigen::Vector3f& min_pt, const Eigen::Vector3f& max_pt,
+          std::shared_ptr<apollo::perception::base::Object> object);
+    ```
+
+    根据min_pt和max_pt计算默认的`center,size(LWH),direction,polygon(4)`
+
+  - 判断输入的点云是否位于一条直线上，如果是的话加入轻微扰动
+
+    ```c++
+      // @brief: decide whether input cloud is on the same line.
+      //         if ture, add perturbation.
+      // @param [in/out]: pointcloud.
+      // @param [out]: is line: true, not line: false.
+      bool ObjectBuilder::LinePerturbation(
+          apollo::perception::base::PointCloud<apollo::perception::base::PointF>*
+              cloud);
+    ```
+
+    判断三点是否共线，$x_1y_2=x_2y_1$ ，若共线则在坐标上添加一个小扰动0.001
+
+  - 根据输入点云得到多边形
+
+    ```c++
+      // @brief: main interface to get polygon from input point cloud
+      bool GetConvexHull(const CLOUD_IN_TYPE& in_cloud,
+                         CLOUD_OUT_TYPE* out_polygon) {
+        SetPoints(in_cloud);//将点云复制到类内成员变量
+        if (!GetConvexHullMonotoneChain(out_polygon)) {
+          return MockConvexHull(out_polygon);
+        }
+        return true;
+      }
+    ```
+
+    - 利用二维凸包算法 计算凸包
+
+      ```c++
+        // compute convex hull using Andrew's monotone chain algorithm
+        bool common::GetConvexHullMonotoneChain(CLOUD_OUT_TYPE* out_polygon);
+      ```
+
+      >1. 排序，根据某个坐标轴为主进行排序
+      >2. 从x最小的点开始
+      >3. 利用类似Graham’s Scan算法，利用栈去寻找下半包
+      >4. 从x最大的点开始
+      >5. 利用类似Graham’s Scan算法，利用栈去寻找上半包
+      >6. 两个半包结合，即是整个凸包
+      >   （上半包和下半包可以合并成一个while函数）
+
+      针对一些退化的情况，例如点云中的点小于3等情况，通过以下方式获取凸包：
+
+      ```c++
+        // mock a polygon for some degenerate cases
+        bool MockConvexHull(CLOUD_OUT_TYPE* out_polygon);
+      ```
+
+- 计算凸包中心和大小：
+
+  ```c++
+    // @brief: calculate the size, center of polygon.
+    // @param [in/out]: ObjectPtr.
+    void ComputePolygonSizeCenter(
+        std::shared_ptr<apollo::perception::base::Object> object);
+  ```
+
+  - 计算边界框的大小和中心点,输入包括点云，物体方向，输出边界框的大小和中心点
+
+    ```c++
+    // @brief calculate the size and center of the bounding-box of a point cloud
+    // old name: compute_bbox_size_center_xy
+    template <typename PointCloudT>
+    void CalculateBBoxSizeCenter2DXY(const PointCloudT &cloud,
+                                     const Eigen::Vector3f &dir,
+                                     Eigen::Vector3f *size, Eigen::Vector3d *center,
+                                     float minimum_edge_length = FLT_EPSILON) {
+    ```
+
+  - 计算并填充其余的一些物体多边形信息，如时间戳和anchor_point
+
+    ```c++
+      // @brief: calculate and fill timestamp and anchor_point.
+      // @param [in/out]: ObjectPtr.
+      void ComputeOtherObjectInformation(
+          std::shared_ptr<apollo::perception::base::Object> object);
+    ```
+
+    将object的中心作为anchor_point,object所包含点云所有点的平均时间作为物体的最新测量时间。
+    更新`object->anchor_point`,`object->latest_tracked_time`
+
+----
+
+### 五、过滤检测得到的object
+
+接口函数：
+
+```c++
+  // @brief: filter objects
+  // @param [in]: options
+  // @param [in/out]: frame
+  // segmented_objects should be valid, and will be filtered,
+  bool ObjectFilterBank::Filter(const ObjectFilterOptions& options, LidarFrame* frame);
+```
+
+通过`FilterBank`中存在的filter过滤器对检测得到的object进行过滤，注意此处filterbank中可能存在不止一种过滤器,此处在初始化配置是添加的过滤器名称为:`ROIBoundaryFilter` 通过高精度地图中感兴趣的区域进行过滤。
+
+如果高精度地图中没有对应的roi polygons，则跳过该步骤，并令object中的：
+`object->lidar_supplement.is_in_roi=true`
+否则则进行过滤：
+
+1. 首先，`FillObjectRoiFlag(options, frame);`确定object是否位于roi的交界处。
+
+   ```c++
+     // @brief: fill is_in_roi in lidar object supplement
+     void ROIBoundaryFilter::FillObjectRoiFlag(const ObjectFilterOptions& options, LidarFrame* frame);
+   ```
+
+2. 然后，在世界坐标系中构建polygon(将原lidar坐标系中的polygon中的点转换到世界坐标系中的点)
+
+   ```c++
+     // @brief: given input objects, build polygon in world frame
+     void ROIBoundaryFilter::BuildWorldPolygons(const ObjectFilterOptions& options,
+                             const LidarFrame& frame);
+   ```
+
+3. 然后，过滤在道路边界之外的object：
+
+   ```c++
+     // @brief: filter outside objects based on distance to boundary
+     void FilterObjectsOutsideBoundary(const ObjectFilterOptions& options,
+                                       LidarFrame* frame,
+                                       std::vector<bool>* objects_valid_flag);
+   ```
+
+4. 然后，过滤在道路边界内的object,置信度<=0.11。
+
+   ```c++
+     // @brief: filter inside objects based on distance to boundary
+     void FilterObjectsInsideBoundary(const ObjectFilterOptions& options,
+                                      LidarFrame* frame,
+                                      std::vector<bool>* objects_valid_flag);
+   ```
+
+5. 最后，通过confidence对在roi边界处 或者roi外部的object的confidence<0.5进行过滤：
+
+   ```c++
+     // @brief: filter objects based on position and confidence
+     void FilterObjectsByConfidence(const ObjectFilterOptions& options,
+                                    LidarFrame* frame,
+                                    std::vector<bool>* objects_valid_flag);
+   ```
+
+----
+
+**最后将检测结果通过通道`"/perception/inner/SegmentationObjects"`输出该部分得到的障碍物检测信息，对应的消息类型是：`<LidarFrameMessage>`（位于lidar_inner_component_message.h中 即内部消息类型定义）** 
 
 > CnnSeg网络的相关解析可以参考：https://zhuanlan.zhihu.com/p/35034215
+>
+> https://www.jianshu.com/p/95a51214959b
+> https://github.com/ApolloAuto/apollo/blob/master/docs/specs/3d_obstacle_perception_cn.md
+>
 
 
 
