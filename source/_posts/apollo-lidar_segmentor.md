@@ -498,7 +498,7 @@ LidarProcessResult LidarObstacleSegmentation::Process(
       >4. 从x最大的点开始
       >5. 利用类似Graham’s Scan算法，利用栈去寻找上半包
       >6. 两个半包结合，即是整个凸包
-      >   （上半包和下半包可以合并成一个while函数）
+      >     （上半包和下半包可以合并成一个while函数）
 
       针对一些退化的情况，例如点云中的点小于3等情况，通过以下方式获取凸包：
 
@@ -610,9 +610,8 @@ LidarProcessResult LidarObstacleSegmentation::Process(
 >
 > https://www.jianshu.com/p/95a51214959b
 > https://github.com/ApolloAuto/apollo/blob/master/docs/specs/3d_obstacle_perception_cn.md
->
 
-
+扫描线算法：https://www.jianshu.com/p/d9be99077c2b
 
 
 

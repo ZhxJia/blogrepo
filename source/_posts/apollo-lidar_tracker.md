@@ -189,35 +189,197 @@ fusion_classifier_->Classify(fusion_classifier_options, frame);
 1. modify objects timestamp  if necessary
    将物体检测的时间戳修改为数据帧frame的时间戳，之前`object->latest_tracked_time`为物体点云所有点的平均时间
 
-2. add global offset to pose
+2. add global offset to pose(only when no track exists)
 
-3. 分割前景和背景的物体，并转换为被跟踪物体
+3. 分离前景和背景的物体，并转换为被跟踪物体
 
    ```c++
      // @brief: split foreground/background objects and attach to tracked objects
      // @params [in]: objects
      // @params [in]: sensor info
+     // @output :background_objects_,foreground_objects_,shape_features,shape_features_full
      void MlfEngine::SplitAndTransformToTrackedObjects(
          const std::vector<base::ObjectPtr>& objects,
          const base::SensorInfo& sensor_info);
-   ```
-
-   - 向被跟踪列表中添加object：
-
+```
+   
+- 向被跟踪列表中添加object：
+   
      ```c++
+     // @brief: add object to tracked list
+     // @params[in]: objectptr,pose(world->lidar),sensor_info
+  
      tracked_objects[i]->AttachObject(objects[i], sensor_to_local_pose_,
-                                       global_to_local_offset_, sensor_info);
+                                    global_to_local_offset_, sensor_info);
      ```
 
-     
-
-   - 如果object不是背景且采用直方图匹配方法,则计算物体的外观特征中的`histogram_distance`
-
-     ```
+     向`<TrackedObject>`数据类型中传递object的相关属性(朝向,大小,中心,)。
+     **存疑：这个sensor_to_local_pose_的转换方向不明**
+   
+- 如果object不是背景且采用直方图匹配方法,则计算物体的外观特征中的`histogram_distance`
+   
+     ```c++
      tracked_objects[i]->ComputeShapeFeatures();
      ```
+   
+     - 计算物体的外观特征：
+     
+       ```c++
+       // @brief: compute object's shape feature
+       // @params[in]: histogram_bin_size default:10
+       // @params[out]: object's shape feature
+       FeatureDescriptor::ComputeHistogram(int bin_size, float* feature) {...}
+       ```
+     
+       根据object的点云计算特征向量的组成为：
+     
+       ```c++
+          ...　
+           feature[0] = center_pt_.x / 10.0f; //x轴点云中心点
+           feature[1] = center_pt_.y / 10.0f; //y轴点云中心点
+           feature[2] = center_pt_.z; //z轴点云中心点 
+           feature[3] = xsize; //x轴点云长度
+           feature[4] = ysize; //y轴点云长度
+           feature[5] = zsize; //z轴点云长度
+           feature[6] = static_cast<float>(pt_num); //点云中点数量
+           for (size_t i = 0; i < stat_feat.size(); ++i) {
+             feature[i + 7] = //直方图特征,每一个点对应stat_feat中的区间位置
+                 static_cast<float>(stat_feat[i]) / static_cast<float>(pt_num);
+           } //总共37维
+       ```
+   
+4. assign tracked objects to tracks,匹配objects和tracks
+
+   ```c++
+   // @brief: match tracks and objects and object-track assignment
+   // @params [in]: match options  default:null
+   // @params [in]: objects for match :foreground and background separately
+   // @params [in]: name (foreground or background)
+   // @params [in/out]: tracks for match and assignment
+   // @note :分开单独处理前景和背景
+   void MlfEngine::TrackObjectMatchAndAssign(
+       const MlfTrackObjectMatcherOptions& match_options,
+       const std::vector<TrackedObjectPtr>& objects, const std::string& name,
+       std::vector<MlfTrackDataPtr>* tracks) {...}
+   ```
+
+   - **二分图**匹配检测到的detected objects和tracks
+     `  matcher_->Match(match_options, objects, *tracks, &assignments,                  &unassigned_tracks, &unassigned_objects);`　
+
+     ```c++
+       // @brief: match detected objects to tracks
+       // @params [in]: new detected objects for matching
+       // @params [in]: maintaining tracks for matching
+       // @params [out]: assignment pair of object & track
+       // @params [out]: tracks without matched object
+       // @params [out]: objects without matched track
+       void MlfTrackObjectMatcher::Match(const MlfTrackObjectMatcherOptions &options,
+                  const std::vector<TrackedObjectPtr> &objects,
+                  const std::vector<MlfTrackDataPtr> &tracks,
+                  std::vector<std::pair<size_t, size_t> > *assignments,
+                  std::vector<size_t> *unassigned_tracks,
+                  std::vector<size_t> *unassigned_objects);
+     ```
+
+     - 前景和背景分开处理,此处仅以前景为例,计算关联的代价矩阵:
+
+       ```c++
+       // @brief: compute association matrix
+       // @params [in]: maintained tracks for matching
+       // @params [in]: new detected objects for matching
+       // @params [out]: matrix of association distance
+       void MlfTrackObjectMatcher::ComputeAssociateMatrix(
+           const std::vector<MlfTrackDataPtr> &tracks,
+           const std::vector<TrackedObjectPtr> &new_objects,
+           common::SecureMat<float> *association_mat) {...}
+       ```
+
+       - 计算new detected object 与已存在的track两两之间的匹配程度(距离)`track_object_distance`
+
+         ```c++
+         // @brief: compute object track distance
+         // @params [in]: object
+         // @params [in]: track data
+         // @return: distance
+         float MlfTrackObjectDistance::ComputeDistance(
+             const TrackedObjectConstPtr& object,
+             const MlfTrackDataConstPtr& track) const {...}
+         ```
+
+         关联特征权重表：
+
+         |          关联特征          | 一致性评估 | 默认权重(前景,背景) |
+         | :------------------------: | :--------: | :-----------------: |
+         |  **location_dist_weight**  |    运动    |    **0.6** , 0.0    |
+         |   direction dist weight    |    运动    |      0.2 , 0.0      |
+         |   bbox size dist weight    |    外观    |      0.1 , 0.0      |
+         |   point num dist weight    |    外观    |      0.1 , 0.0      |
+         | **histogram dist weight**  |    外观    |    **0.5** , 0.0    |
+         | centroid shift dist weight |    外观    |      0.0 , 0.2      |
+         |    bbox iou dist weight    |    外观    |      0.0 , 0.8      |
+
+         由上表可以看出，在计算关联距离时，重点考虑的是几何距离和两者的形状相似度。
+
+         - `track->PredictState(current_time)`预测状态，包含了位置`latest_anchor_point`和速度信息`latest_velocity` 共6个状态。
+
+         - 根据当前object和track预测的状态信息，分别计算上述7个特征,加权求和，函数实现位于
+           `distace_collection.h`中。
+           LocationDistance :$\sqrt{{\Delta x}^2+{\Delta y}^2+{\Delta z}^2}　\in (0,\infin)$ 
+
+           DirectionDistance: $-cos(\theta)+1 \in (0,2)$　,$\theta$为两个物体方向的夹角
+           BboxSizeDistance:$min\{\frac{|oldsize\_x-newsize\_x|}{max\{oldsize\_x,newsize\_x\}},\frac{|oldsize\_y-newsize\_y|}{max\{oldsize\_y,newsize\_y\}}\} \in (0,1)$ 
+
+           PointNumDistance:$\frac{|old\_point\_num-new\_point\_num|}{max(old\_point\_num,new\_point\_num)} \in (0,1)$
+           HistogramDistance: $d+=abs(old\_feature[i]-new\_feature[i]) \in(0,3)$
+
+           CentroidShiftDistance: $\sqrt{\Delta x^2+\Delta y^2}$
+           BboxIouDistance:  $dist = (1-iou)*match\_threshold$  其中match_threshold = 4.0
+
+     - 然后进行关联,前景关联采用`<MultiHmBipartiteGraphMatcher>`
+
+       背景关联使用`<GnnBipartiteGraphMatcher>` ,同一继承自`<BaseBipartiteGraphMatcher>`接口类
+
+       ```c++
+         // @brief: match interface
+         // @params [in]: match params
+         // @params [out]: matched pair of objects & tracks
+         // @params [out]: unmatched rows
+         // @params [out]: unmatched cols
+         void Match(const BipartiteGraphMatcherOptions &options,
+                    std::vector<NodeNodePair> *assignments,
+                    std::vector<size_t> *unassigned_rows,
+                    std::vector<size_t> *unassigned_cols);
+       ```
+
+       实际上调用的是根据计算得到的代价矩阵，根据门控匈牙利算法:`<common::GatedHungarianMatcher>` ,其中设置参数`max_match_distance=4`,`bound_value=100`
+
+     - 设置objects中对应object的association_score,
+
+   - 对于已关联的object和track,执行下列函数，将object添加到track的缓冲区`cached_objects`中。
+
+     ```C++
+     // @brief: 将已经与track关联的object添加到缓冲区
+     // @param[in]: obj与track关联的新检测物体
+     void MlfTrackData::PushTrackedObjectToCache(TrackedObjectPtr obj) {...}
+     ```
+
+   - 对于未被关联的objects，需要创建新的tracks,更新`MlfTrackData`中与跟踪相关的状态
+
+     ```c++
+     // @brief: initialize new track data and push new object to cache
+     // @params [in/out]: new track data
+     // @params [in/out]: new object
+     void MlfTracker::InitializeTrack(MlfTrackDataPtr new_track_data,
+                                      TrackedObjectPtr new_object) {...}
+     ```
 
      
+
+
+
+
+
+
 
 
 
