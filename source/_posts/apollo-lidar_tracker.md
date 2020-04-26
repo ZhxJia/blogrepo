@@ -373,17 +373,217 @@ fusion_classifier_->Classify(fusion_classifier_options, frame);
                                    TrackedObjectPtr new_object) {...}
      ```
    
-     
+     创建新的track的过程：从`MlfTrackDataPool`对象池中创建`MlfTrackDataPtr`实例`track_data`,然后通过
+     `<MlfTracker>`类中的`InitializeTrack`对创建的`track_data`结合提供的`object`信息，进行相关跟踪属性的赋值，然后将得到的`track_data`加入到已存在的跟踪列表`std::vector<MlfTrackDataPtr>`中。
+
+5. state filter in tracker if is main sensor (default : Velodyne64)
+
+   ```c++
+   // @brief: filter tracks
+   // @params [in]: tracks for filter
+   // @params [in]: frame timestamp
+   void MlfEngine::TrackStateFilter(const std::vector<MlfTrackDataPtr>& tracks,
+                                    double frame_timestamp) {...}
+   ```
+
+   输入是上一步得到的`std::vector<MlfTrackDataPrt>` 
+
+   - 从CachedObjects(latest_tracked_time和object的pair)获取持续时间超过阈值的,同时删除小于时间阈值的object.
+
+     ```c++
+     // @brief: get/clean track objects from cached based trackdata
+     // @param[in/out]: objects
+     // @note :每一个跟踪物体都有一个对应的trackdata
+     void MlfTrackData::GetAndCleanCachedObjectsInTimeInterval(
+         std::vector<TrackedObjectPtr>* objects) {...}
+     ```
+
+     这里有两个时间`latest_visible_time_`(最近一次可见的时间)及`latest_cached_time_`(上一次被加入到缓冲区的时间)。
+     `catched_object->timestamp<=latest_visible_time_`则删除，
+     `catched_object->timestamp<=latest_cached_time_`则将该cached_object添加到objects中
+
+   - 根据从`catched_objects`中获得的objects,更新TrackData
+
+     ```c++
+     // @brief: update track data with object
+     // @params [in/out]: history track data
+     // @params [in/out]: new object
+     void MlfTracker::UpdateTrackDataWithObject(MlfTrackDataPtr track_data,
+                                                TrackedObjectPtr new_object) {...}
+     ```
+
+     1. state fitler and store belief in new_object ,(filters contain `MlfShapeFilter` `MlfMotionFilter`)
+
+        ```c++
+        // @brief: updating shape filter with object
+        // @params [in]: options for updating
+        // @params [in]: track data, not include new object
+        // @params [in/out]: new object for updating
+        void MlfShapeFilter::UpdateWithObject(const MlfFilterOptions& options,
+                                              const MlfTrackDataConstPtr& track_data,
+                                              TrackedObjectPtr new_object) {...}
+        ```
+
+        此处未详细看，基本处理包括计算object polygon;方向的滑动平均过滤;更新new object的`ouput_center`,
+        `output_direction`,`output_size`
+
+        ```c++
+        // @brief: updating motion filter with object
+        // @params [in]: options for updating
+        // @params [in]: track data, not include new object
+        // @params [in/out]: new object for updating
+        void MlfMotionFilter::UpdateWithObject(const MlfFilterOptions& options,
+                                               const MlfTrackDataConstPtr& track_data,
+                                               TrackedObjectPtr new_object) {...}
+        ```
+
+        此处亦未详细看，过滤方法采用KalmanFilter,此处的基本处理过程包括了:
+        若object的track_data->age为0,则初始化状态，若该object为背景则不进行处理，否则
+        　首先计算相关的测量速度值(anchor_point_velocity,bbox_center_velocity,bbox_corner_velocity),根据运动一致性选取速度`selected_measured_velocity` 同时根据object点的数量差异和关联分数评估测量的质量
+        `update_quality`，代码如下：
+
+        ```c++
+        1. motion_measurer_->ComputeMotionMeasurment(track_data, new_object);
+        ```
+
+        　然后使用自适应鲁棒卡尔曼滤波对track的状态估计，并剔除异常数据的影响，相较于传统的卡尔曼滤波，此处的修改包括：
+
+        > - 在一系列的重复观测中选择速度测量，即滤波算法的输入包括了锚点以为，边界框中心偏移，边界框角点偏移等。卡尔曼滤波更新的观测值为速度，每次观测三个速度值:锚点移位速度，边界框中心偏移速度，边界框角点位移速度，从这三个速度中，根据运动一致性约束，选取和之前观测速度偏差最小的速度作为最终的观测值，并根据最近３次的速度观测值，计算加速度的观测值。
+        >
+        > - 在过滤中使用故障阈值`breakdown_threshold_`，当更新的增益过大时，用于克服增益的过度估计，其中速度的故障阈值是动态计算的，与速度误差协方差矩阵有关，而加速度的故障阈值是一个定值，默认为２.
+        > - 更新关联质量，原始的卡尔曼滤波在更新状态时不区分测量的质量，此处使用两种策略来计算更新关联质量，关联分数和前后两个object的点云数量变化,之后取得分小的结果控制滤波器噪声。
+
+        ```c++
+        2. KalmanFilterUpdateWithPartialObservation(track_data, latest_object,
+                                                   new_object);
+        ```
+
+        　然后进行convergence估计
+
+        ```c++
+        3. ConvergenceEstimationAndBoostUp(track_data, latest_object, new_object);
+        ```
+
+        ​    然后object中的belirf属性复制到output属性
+
+        ```c++
+        4. BeliefToOutput(new_object);
+        ```
+
+        ​	然后进行后处理：
+
+        ```c++
+        5. motion_refiner_->Refine(track_data, new_object)
+        ```
+
+        ​	最后进行在线协方差估计:
+
+        ```c++
+        6. OnlineCovarianceEstimation(track_data, new_object);
+        ```
+
+     2.  push new_object to track_data 更新object成为新的track:
+
+        ```c++
+        void MlfTrackData::PushTrackedObjectToTrack(TrackedObjectPtr obj) {...}
+        ```
+
+6. track to object if is main sensor ,因为objects可能来自于多个不同的Lidar传感器，此处是在主传感器上进行汇总。
+
+   ```c++
+   // @brief: collect track results and store in frame tracked objects
+   // @params [in/out]: lidar frame
+   void MlfEngine::CollectTrackedResult(LidarFrame* frame) {...}
+   ```
+
+   综合前面得到的`foreground_track_data_`以及`background_track_data_`通过函数`MlfTrackData::ToObject`填充`<LidarFrame>`数据结构
+
+7. remove stale data 删除过期数据(latest_visible_time+reserved_invisible_time >= timestamp)
+
+   ```c++
+   // @brief: remove stale track data for memory management
+   // @params: name
+   // @params: timestamp
+   // @params [in/out]: tracks to be cleaned
+   void MlfEngine::RemoveStaleTrackData(const std::string& name, double timestamp,
+                                        std::vector<MlfTrackDataPtr>* tracks) {...}
+   ```
 
 
 
+跟踪主要流程总结如下：
 
-
-
-
-
+- 构造跟踪对象并将其转换为世界坐标
+- 预测现有跟踪列表的状态，并进行匹配
+- 在更新后的跟踪列表中更新运动窗台，并收集跟踪结果
 
 ---
 
 ### Classify
+
+主入口函数：
+
+```c++
+// @brief: classify object list, and fill type in object.
+// @param [in]: options
+// @param [in/out]: object list
+bool FusedClassifier::Classify(const ClassifierOptions& options,
+                               LidarFrame* frame) {...}
+```
+
+
+
+首先将objects加入到序列`<ObjectSequence>`中,序列是track_id与对应object的map
+
+```c++
+// @brief: add tracked objects to sequence,and remove stale tracks
+// @param [in]: objectptr ,timestamp
+// @return: true or false
+
+bool ObjectSequence::AddTrackedFrameObjects(
+    const std::vector<ObjectPtr>& objects, TimeStampKey timestamp) {...}
+```
+
+物体通用类型包括：
+
+```c++
+
+// @brief general object type
+enum class ObjectType {
+  UNKNOWN = 0,
+  UNKNOWN_MOVABLE = 1,
+  UNKNOWN_UNMOVABLE = 2,
+  PEDESTRIAN = 3,
+  BICYCLE = 4,
+  VEHICLE = 5,
+  MAX_OBJECT_TYPE = 6,
+};
+```
+
+如果object是背景，则将物体类型置为`ObjectType::UNKNOWN_UNMOVABLE`
+
+否则，首先获取特定track_id在特定时间段内对应的object列表
+
+```c++
+// @brief: 获取特定track_id在到当前时刻的往前window_time时间序列中对应的object组成的列表
+// @param[in]: track_id , window_time
+// @param[in/out]: track (在window_time时间段内的track_id的object)
+bool ObjectSequence::GetTrackInTemporalWindow(TrackIdKey track_id,
+                                              TrackedObjects* track,
+                                              TimeStampKey window_time) {...}
+```
+
+然后进行类型融合：
+
+```c++
+bool CCRFSequenceTypeFusion::TypeFusion(const TypeFusionOption& option,
+                                        TrackedObjects* tracked_objects) {...}
+```
+
+- ```c++
+  bool CCRFSequenceTypeFusion::FuseWithConditionalProbabilityInference(
+      TrackedObjects* tracked_objects) {}
+  ```
+
+- 
 
