@@ -330,20 +330,18 @@ fusion_classifier_->Classify(fusion_classifier_options, frame);
 
          LocationDistance :  $\sqrt{\Delta x^2+\Delta y^2+\Delta z^2}$
          
-  DirectionDistance: $-cos(\theta)+1 \in (0,2)$　,$\theta$为两个物体方向的夹角
+         DirectionDistance: $-cos(\theta)+1 \in (0,2)$　,$\theta$为两个物体方向的夹角
          BboxSizeDistance:$min\{\frac{|oldsize\_x-newsize\_x|}{max\{oldsize\_x,newsize\_x\}},\frac{|oldsize\_y-newsize\_y|}{max\{oldsize\_y,newsize\_y\}}\} \in (0,1)$ 
-         
-  PointNumDistance:$\frac{|old\_point\_num-new\_point\_num|}{max(old\_point\_num,new\_point\_num)} \in (0,1)$
+         PointNumDistance:$\frac{|old\_point\_num-new\_point\_num|}{max(old\_point\_num,new\_point\_num)} \in (0,1)$
          HistogramDistance: $d+=abs(old\_feature[i]-new\_feature[i]) \in(0,3)$
-         
-    CentroidShiftDistance: $\sqrt{\Delta x^2+\Delta y^2}$
-         BboxIouDistance:  $dist = (1-iou)*match\_threshold$  其中match_threshold = 4.0
-
-     - 然后进行关联,前景关联采用`<MultiHmBipartiteGraphMatcher>`
-
-       背景关联使用`<GnnBipartiteGraphMatcher>` ,同一继承自`<BaseBipartiteGraphMatcher>`接口类
+         CentroidShiftDistance: $\sqrt{\Delta x^2+\Delta y^2}$
+         BboxIouDistance:  $dist = (1-iou)*match\_threshold$  其中match_threshold = 4.0       
+       
+      - 然后进行关联,前景关联采用`<MultiHmBipartiteGraphMatcher>`
      
-       ```c++
+        背景关联使用`<GnnBipartiteGraphMatcher>` ,同一继承自`<BaseBipartiteGraphMatcher>`接口类
+     
+        ```c++
          // @brief: match interface
          // @params [in]: match params
          // @params [out]: matched pair of objects & tracks
@@ -353,18 +351,16 @@ fusion_classifier_->Classify(fusion_classifier_options, frame);
                     std::vector<NodeNodePair> *assignments,
                     std::vector<size_t> *unassigned_rows,
                std::vector<size_t> *unassigned_cols);
-       ```
+        ```
+        实际上调用的是根据计算得到的代价矩阵，根据门控匈牙利算法:`<common::GatedHungarianMatcher>` ,其中设置参数`max_match_distance=4`,`bound_value=100`
+        
 
-       实际上调用的是根据计算得到的代价矩阵，根据门控匈牙利算法:`<common::GatedHungarianMatcher>` ,其中设置参数`max_match_distance=4`,`bound_value=100`
-
-     - 设置objects中对应object的association_score,
-  
    - 对于已关联的object和track,执行下列函数，将object添加到track的缓冲区`cached_objects`中。
    
      ```C++
      // @brief: 将已经与track关联的object添加到缓冲区
      // @param[in]: obj与track关联的新检测物体
-  void MlfTrackData::PushTrackedObjectToCache(TrackedObjectPtr obj) {...}
+    void MlfTrackData::PushTrackedObjectToCache(TrackedObjectPtr obj) {...}
      ```
 
    - 对于未被关联的objects，需要创建新的tracks,更新`MlfTrackData`中与跟踪相关的状态
