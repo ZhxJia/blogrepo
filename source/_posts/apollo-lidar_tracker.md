@@ -562,7 +562,12 @@ enum class ObjectType {
 
 如果object是背景，则将物体类型置为`ObjectType::UNKNOWN_UNMOVABLE`
 
-否则，首先获取特定track_id在特定时间段内对应的object列表
+否则，首先获取特定track_id在特定时间段内对应的object列表，即获取一个被跟踪物体的序列：
+
+> (Time_1,TrackedObject_1),
+> (Time_1,TrackedObject_2),
+> ....
+> (Time_n,TrackedObject_n),
 
 ```c++
 // @brief: 获取特定track_id在到当前时刻的往前window_time时间序列中对应的object组成的列表
@@ -581,9 +586,139 @@ bool CCRFSequenceTypeFusion::TypeFusion(const TypeFusionOption& option,
 ```
 
 - ```c++
+  // @brief: Enter fuse with conditional probability inference
+  // @param[in]: TrackedObject with timestamp
   bool CCRFSequenceTypeFusion::FuseWithConditionalProbabilityInference(
-      TrackedObjects* tracked_objects) {}
+    TrackedObjects* tracked_objects) {...}
   ```
+  
+  - 对于跟踪序列中的每一个物体，执行`one_shot_fuser_.FuseOneShotTypeProbs`
+  
+    > 整个过程共分两步：
+    >
+    > - 状态平滑
+    > - Viterbi算法推断状态
+  
+    
+  
+    ```c++
+    // @brief: fuse on shot prons in sequence
+    // @param[in]: ObjectPtr(the object in sequence)
+    // @param[out]: log prob(fused oneshot probs type:a vector [valid_type_num,1])
+    
+    bool CCRFOneShotTypeFusion::FuseOneShotTypeProbs(const ObjectPtr& object,
+                                                     Vectord* log_prob) {...}
+    ```
+  
+    `smooth_matrices_:`
+  
+    ```c++
+    DecisionForestClassifier
+    0.7751 0.0298 0.0639 0.1312 // -> sum = 1.0
+    0.2510 0.6802 0.0615 0.0073
+    0.1904 0.0628 0.6314 0.1155
+    0.1054 0.0003 0.0038 0.8905
+    
+    CNNSegmentation
+    0.9095 0.0238 0.0190 0.0476
+    0.3673 0.5672 0.0642 0.0014
+    0.1314 0.0078 0.7627 0.0980
+    0.3383 0.0017 0.0091 0.6508
+    
+    //对应四种有效类型：UNKNOWN,PEDESTRIAN,BICYCLE,VEHICLE
+    ```
+  
+    `confidence_smooth_matrix_:`
+  
+    ```c++
+    Confidence
+    1.00 0.00 0.00 0.00
+    0.40 0.60 0.00 0.00
+    0.40 0.00 0.60 0.00
+    0.50 0.00 0.00 0.50
+    ```
+  
+    计算不考虑整个序列的单独各个object的概率single_prob:
+    $$
+    p(c|x) = p(c|x,o)p(o|x)+p(c|x,\widetilde{o})p(\widetilde{o}|x)
+    $$
+    程序表示为, 输入为x条件下类别的概率 = 前景的概率 * 类别概率+（背景的概率）* 类别的置信度平滑矩阵 * 类别概率
+  
+    ```c++
+    single_prob = conf * single_prob +
+                    (1.0 - conf) * confidence_smooth_matrix_ * single_prob;
+    ```
+  
+    转换为对数概率 $log\_prob=log(single\_prob)$ ,获得该object属于各个类别的对数概率。由此可得到该
+    TrackedObjects对应序列的每一个object的4种有效类型概率。
+  
+  - 通过维特比(Viterbi)算法推断状态：
+  
+    > 维特比算法前提是状态链是马尔可夫链，**下一时刻的状态仅仅取决于当前时刻的状态**
+    > 假设隐状态数量为m,观测状态的数量为n,隐状态分别为$s_1,s_2,...,s_m$,可观测状态分别为
+    > `o_1,o_2,...,o_n`,则有：
+    > 状态转移矩阵$P(m\times m):P[i,j]$ 代表状态i到状态j转移的概率,$\sum_{j=0}^mP[i,j]=1$ ,发射概率矩阵
+    > $R(m\times n):R[i,j]$代表隐状态i能被观测到为j的概率:$\sum_{j=0}^nP[i,j]=1$ 
+  
+    
+  
+    添加先验知识用于抑制突然出现的物体类型：
+  
+    ```c++
+    //UNKNOWN,PEDESTRIAN,BICYCLE,VEHICLE
+        0.34     0.22     0.33    0.11 //UNKNOWN
+        0.03     0.90     0.05    0.02 //PEDESTRIAN   
+        0.03     0.05     0.90    0.02 //BICYCLE
+        0.06     0.01     0.03    0.90 //VEHICLE
+    //对应四种有效物体类型的先验知识 转移概率矩阵
+    transition_matrix_alpha:1.8
+    ```
+  
+    下面程序是根据转移概率矩阵(left->right)推断当前时刻最大概率的过程：
+    认为fused_sequence_probs为隐状态，根据上一时刻的隐状态fused_sequence_probs[i-1]和状态转移矩阵求解联合状态矩阵，其中矩阵元素$fused\_sequence\_probs\_[i][j]$的求解方式为：下列代码中，fused_oneshot_probs\_是每个时刻独立的4类概率，经过平滑和log(·)处理。transition_matrix\_是状态转移矩阵P，维度为4x4，经过log(·)处理，fused_sequence_probs_为Viterbi算法推理后的修正状态(也就是真实的隐状态)。
+    $$
+    p(s_{i,j}, s_{i-1,k}) = p_{prv\_state=s_{i-1,k}} * P(s_j|s_k)
+    $$
+    
+  
+    ```c++
+      for (std::size_t i = 1; i < length; ++i) {
+        for (std::size_t right = 0; right < VALID_OBJECT_TYPE; ++right) {
+          double prob = 0.0;
+          double max_prob = -DBL_MAX;
+          std::size_t id = 0;
+          for (std::size_t left = 0; left < VALID_OBJECT_TYPE; ++left) {
+            prob = fused_sequence_probs_[i - 1](left) +
+                   transition_matrix_(left, right) * s_alpha_ +
+                   fused_oneshot_probs_[i](right);
+            if (prob > max_prob) {
+              max_prob = prob; //根据转移概率推断得到当前的object (right值)最大概率
+              id = left;
+            }
+          }
+          fused_sequence_probs_[i](right) = max_prob;
+          state_back_trace_[i](right) = static_cast<int>(id);
+        }
+      }
+    ```
+  
+    获取类别概率后：
+  
+    ```c++
+    RecoverFromLogProbability(&fused_sequence_probs_.back(), &object->type_probs,
+                              &object->type); //将Eigen转换回std::vector得到物体类别
+    ```
+  
+    
 
-- 
 
+
+
+
+
+
+### 参考：
+
+类型融合：https://blog.csdn.net/qq_41204464/article/details/102987228
+
+跟踪：https://mp.weixin.qq.com/s?__biz=MzI1NjkxOTMyNQ==&mid=2247485879&idx=1&sn=d921ab976ebc72c502eb5df1ef7ff548&chksm=ea1e1bc5dd6992d3220bd47c5cd951f38648c060d4f9dc9bfbe5eac1a3076f920fa3e360c038&scene=21#wechat_redirect

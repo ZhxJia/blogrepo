@@ -321,76 +321,79 @@ LidarProcessResult LidarObstacleSegmentation::Process(
 
          - `UnionNodes()`将相邻的节点进行组合。采用压缩的联合查找算法(Union Find algorithm)有效查找连接组件，每个组件都是候选障碍物集群。
 
-           > 参考算法”并查集“
+           <img src="apollo-lidar_segmentor\disjoint.jpeg" style="zoom:67%;" />
 
+           > 参考算法”并查集“  ，可参考如下链接
+       > https://cloud.tencent.com/developer/news/362302
+       
          - `ToLabelMap(labels)` 将障碍物cluster收集到`<SppLabelImage>`中的数据存储结构`<SppCluster>`中，设置label image中各个cluster的标签id，从1开始，将相同根节点的网格(**程序中称为pixel**)添加到同一个cluster中。
 
        - 然后对获取的到的cluster进行过滤(根据网络输出的confidence_pt_blob,category_pt_blob,以及
          confidence的阈值默认0.1，objectness的阈值0.5进行判断)
-
+       
          ```c++
          // @brief: filter clusters, given confidence map
          // @param [in]: confidence_map of the same size
          // @param [in]: confidence threshold
          void SppLabelImage::FilterClusters(const float* confidence_map,
                                             const float* category_map,
-                                            float confidence_threshold,
+                                        float confidence_threshold,
                                             float category_threshold) 
-         ```
-
-         通过将cluster中所有的pixel对应的confidence或者category的分数和取平均作为cluster的置信度，根据阈值判断是否有效，并对clusters_ 进行过滤，并更新labels_ 中的标签，将无效的cluster的标签置为0(背景)
-
+     ```
+       
+     通过将cluster中所有的pixel对应的confidence或者category的分数和取平均作为cluster的置信度，根据阈值判断是否有效，并对clusters_ 进行过滤，并更新labels_ 中的标签，将无效的cluster的标签置为0(背景)
+       
        - 根据网络输出的class map计算每个cluster的类别
-
+       
          ```c++
            // @brief: calculate class for each cluster, given class map
            // @param [in]: class_map of the same size
-           // @param [in]: class number default:5
+       // @param [in]: class number default:5
            void SppLabelImage::CalculateClusterClass(const float* class_map, size_t class_num);
          ```
 
          默认类别数量是有5类：`UNKNOWN,SAMLLMOT,BIGMOT,NONMOT,PEDESTRIAN` 
-         网络的输出`class_map`共有class_num层,每一层大小为width*height(网格大小)
-
+     网络的输出`class_map`共有class_num层,每一层大小为width*height(网格大小)
+       
        - 根据网络输出的heading_data计算每个cluster的朝向
-
+       
          ```c++
            // @brief: calculate heading (yaw) for each cluster, given heading map
-           // @param [in]: heading_map of the same size
+       // @param [in]: heading_map of the same size
            void SppLabelImage::CalculateClusterHeading(const float* heading_map);
-         ```
-
-         网络输出的heading_map 是由x朝向和y朝向两层组成，根据x方向和y方向的位置朝向通过arctan(y/x)计算得到yaw轴角度。
-
+     ```
+       
+     网络输出的heading_map 是由x朝向和y朝向两层组成，根据x方向和y方向的位置朝向通过arctan(y/x)计算得到yaw轴角度。
+       
        - 根据网络输出的top_z_map计算cluster的高度
-
+       
          ```c++
            // @brief: calculate top_z for each cluster, given top_z map
-           // @param [in]: top_z_map of the same size
+       // @param [in]: top_z_map of the same size
            void SppLabelImage::CalculateClusterTopZ(const float* top_z_map);
-         ```
-
+     ```
+       
        - 根据label_image计算的clusters_ 对齐spp_cluster_list中的clusters_，然后向cluster中添加点云中的点的点的信息，即2d->3d
-
+       
          ```c++
            // @brief: add an 3d point sample
            // @param [in]: cluster id
            // @param [in]: 3d point
            // @param [in]: point height above ground
            // @param [in]: point id
-           void SppClusterList::AddPointSample(size_t cluster_id, const base::PointF& point,
+       void SppClusterList::AddPointSample(size_t cluster_id, const base::PointF& point,
                                	float height, uint32_t point_id);
-         ```
-
+     ```
+       
        - 清除空的cluster
-
+       
          ```c++
-           // @brief: remove empty cluster from clusters
+         // @brief: remove empty cluster from clusters
            void SppClusterList::RemoveEmptyClusters();
-         ```
-
+       ```
+  
   3. 进行**背景分割**，首先需要同步线程，然后将roi点云中的高度拷贝到原始点云中，并将原始点云中的标签修改为对应roi_id的`LidarPointLabel::GROUND`，然后移除ground对应的点points。
-
+  
      ```c++
        // @brief: remove ground points in foreground cluster
        // @param [in]: point cloud
@@ -398,14 +401,16 @@ LidarProcessResult LidarObstacleSegmentation::Process(
        // @param [in]: non ground indices in roi of point cloud
        size_t SppEngine::RemoveGroundPointsInForegroundCluster(
            const base::PointFCloudConstPtr full_point_cloud,
-           const base::PointIndices& roi_indices,
+         const base::PointIndices& roi_indices,
            const base::PointIndices& roi_non_ground_indices);
      ```
-
+  
   4. 将clusters的相关属性添加到`<object>`数据结构中，例如cluster各个类别的概率和对应的object类型：
      object中的`UNKNOWN,PEDESTRIAN,BICYLE,VEHICLE`
      分别对应cluster中的`META_UNKNOW,META_PEDESTRIAN,META_NOMOT,META_SMALLMOT+META_BIGMOT`
      然后将cluster的朝向信息复制到`<object>`的`theta`,`direction`属性。
+
+<img src="apollo-lidar_segmentor\v2-271a10503da886feee8f6e4752a58901_720w.jpg" style="zoom:67%;" />
 
 ----
 
@@ -606,6 +611,16 @@ LidarProcessResult LidarObstacleSegmentation::Process(
 
 **最后将检测结果通过通道`"/perception/inner/SegmentationObjects"`输出该部分得到的障碍物检测信息，对应的消息类型是：`<LidarFrameMessage>`（位于lidar_inner_component_message.h中 即内部消息类型定义）** 
 
+
+
+
+
+
+
+### 参考资料
+
+> 
+>
 > CnnSeg网络的相关解析可以参考：https://zhuanlan.zhihu.com/p/35034215
 >
 > https://www.jianshu.com/p/95a51214959b
@@ -613,7 +628,7 @@ LidarProcessResult LidarObstacleSegmentation::Process(
 
 扫描线算法：https://www.jianshu.com/p/d9be99077c2b
 
-
+lidar 分割： https://cloud.tencent.com/developer/news/362302
 
 
 
