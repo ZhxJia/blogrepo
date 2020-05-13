@@ -518,7 +518,7 @@ bool ProbabilisticFusion::Fuse(const FusionOptions& options,
                根据与该相机检测物体相匹配的track中的最近检测到的lidar或radar物体点云中的点出现在相机视野中的比例；当没有点云信息时，则根据物体3d边界框的顶点投影到相机图像平面的二维边界框在相机视野中所占的比例确定可视率；若边界框也无效的话，则根据物体三维中心点投影到相机图像平面的二维中心点，判断中心点是否位于相机的视野中，是则可视率直接设为1，否则为0。
                由于相机检测物体随着距离的增加准确率会降低，因此根据下图所示的类sigmoid函数得到检测距离对应的权重(图中所示以150作为相机最大有效检测距离，0.25表示曲线的斜率),距离越远对应的值越小，用该值乘以上面得到的可视率作为最终的结果。
 
-               <img src="C:\Users\jia_z\Desktop\blogrepo\source\_posts\apollo-fusion\image-20200512151919053.png" alt="image-20200512151919053" style="zoom:30%;" />
+               <img src="apollo-fusion\image-20200512151919053.png" alt="image-20200512151919053" style="zoom:30%;" />
 
            - DstExistanceFusion::UpdateExistanceState()
              根据各自更新的`bba_vec_`，分别得到对应的概率值`GetToicProbability`和
