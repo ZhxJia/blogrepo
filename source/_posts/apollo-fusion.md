@@ -485,120 +485,351 @@ bool ProbabilisticFusion::Fuse(const FusionOptions& options,
          填充`<AssociationReult>`数据结构中的`track2measurements_dist`和`measurement2track_dist`
 
      - ProbabilisticFusion::UpdateAssignedTracks
-       对于每个track根据当前匹配的新的测量object更新track的状态：
-
+       对于每个track根据当前已匹配的新的测量object更新track的状态，此处有一个参数`match_distance`用于在`ExistanceFusion`中计算`toic score`,由于此处track 和 object已经匹配，直接设置为0与实际的
+match_distance差距不大，因此此处设为0
+       
        - PbfTracker::UpdateWithMeasurement()
          更新包括4个融合方法：类型融合`DstTypeFusion`,运动状态融合`KalmanMotionFusion`,存在性融合
-         `DstExistanceFuison`以及形状外观融合`PbfShapeFusion` 
-
+    `DstExistanceFuison`以及形状外观融合`PbfShapeFusion` 
+       
          -  DstExistanceFusion::UpdateWithMeasurement(）
-           基于证据的方法更新track存在的可能性
-
+    基于证据的方法更新track存在的可能性
+       
            - DstExistanceFusion::GetExistReliability()
-             根据测量物体的类型(是否是UNKNOWN)以及测量传感器的类型判断获取存在因子(这里对于lidar,camera,radar的权重依次为0.9,0.8,0.6,radar可信度较低)
-
+      根据测量物体的类型(是否是UNKNOWN)以及测量传感器的类型判断获取存在因子(这里对于lidar,camera,radar的权重依次为0.9,0.8,0.6,radar可信度较低)
+       
            - DstExistanceFusion::ComputeDistDecay(）
-             将检测物体的中心坐标由世界坐标系转换到传感器坐标系下，并计算距离，若距离大于60m，则设置衰减率为0.8,否则1.0
-
+      将检测物体的中心坐标由世界坐标系转换到传感器坐标系下，并计算距离，若距离大于60m，则设置衰减率为0.8,否则1.0
+       
            - Dst::SetBba(）
-             设置bba_vec_,根据存在的可信度
-
+      设置bba_vec_,根据存在的可信度
+       
            - DstExistanceFusion::GetExistanceProbability()
              通过初始化时预先设置的`combination_relations`和上步设置的`bba_vec_`计算
-             `probability_vec_`,然后返回`EXIST`对应的概率，计算详细过程见附录。
-
+      `probability_vec_`,然后返回`EXIST`对应的概率，计算详细过程见附录。
+       
            - `fused_existance_ =   fused_existance_ + existance_evidence * exist_fused_w * association_prob;` 
-             通过重构的加法和乘法运算符融合更新`bba_vec_`
-
+      通过重构的加法和乘法运算符融合更新`bba_vec_`
+       
            - DstExistanceFusion::UpdateToicWithCameraMeasurement(）
-             针对测量传感器是相机的情况，基本方法同Existance，先设置`bba_vec_`
-
+      针对测量传感器是相机的情况，基本方法同Existance，先设置`bba_vec_`
+       
              - ObjectInCameraView()
                获取物体在相机视野中的可视率in_view_ratio，用于融合更新`bba_vec_` ,三种方法：
                根据与该相机检测物体相匹配的track中的最近检测到的lidar或radar物体点云中的点出现在相机视野中的比例；当没有点云信息时，则根据物体3d边界框的顶点投影到相机图像平面的二维边界框在相机视野中所占的比例确定可视率；若边界框也无效的话，则根据物体三维中心点投影到相机图像平面的二维中心点，判断中心点是否位于相机的视野中，是则可视率直接设为1，否则为0。
-               由于相机检测物体随着距离的增加准确率会降低，因此根据下图所示的类sigmoid函数得到检测距离对应的权重(图中所示以150作为相机最大有效检测距离，0.25表示曲线的斜率),距离越远对应的值越小，用该值乘以上面得到的可视率作为最终的结果。
-
-               <img src="apollo-fusion\image-20200512151919053.png" alt="image-20200512151919053" style="zoom:30%;" />
-
-           - DstExistanceFusion::UpdateExistanceState()
-             根据各自更新的`bba_vec_`，分别得到对应的概率值`GetToicProbability`和
-             `GetExistanceProbability`，并赋值到`track`的相关属性中。
-             更新`track->toic_prob_`和`track->existance_prob_`
-
-         -  KalmanMotionFusion::UpdateWithMeasurement(）
+        由于相机检测物体随着距离的增加准确率会降低，因此根据下图所示的类sigmoid函数得到检测距离对应的权重(图中所示以150作为相机最大有效检测距离，0.25表示曲线的斜率),距离越远对应的值越小，用该值乘以上面得到的可视率作为最终的结果。
+              <img src="apollo-fusion\image-20200512151919053.png" alt="image-20200512151919053" style="zoom:30%;" />
+           
+          - DstExistanceFusion::UpdateExistanceState()
+            根据各自更新的`bba_vec_`，分别得到对应的概率值`GetToicProbability`和
+            `GetExistanceProbability`，并赋值到`track`的相关属性中。
+            
+              更新`track->toic_prob_`和`track->existance_prob_`
+            
+           - KalmanMotionFusion::UpdateWithMeasurement(）
            基于Kalman Filter更新track的运动信息:
-
-           -  KalmanMotionFusion::InitFilter()
+         
+           - KalmanMotionFusion::InitFilter()
              初始化滤波器的相关状态和不确定性矩阵，全局状态有
-             $[center(2),velocity(2),acceleration(2)]$6个。
-
+            $[center(2),velocity(2),acceleration(2)]$6个。
+         
              -  KalmanMotionFusion::UpdateSensorHistory(）
                `std::deque<base::SensorType> history_sensor_type_`中存储了过去物体测量值对应的传感器类型，存储容量为20，`history_velocity_`,`history_timestamp_`同理，分别存储过去测量值的速度和检测时间戳，用途是计算加速度和pseudo measurement，注意radar和lidar各自的最长追溯值为3个。
-             - KalmanFilter::Init()
+             -  KalmanFilter::Init()
                初始化状态矩阵，观测矩阵，状态转移矩阵，状态不确定性，观测不确定性，
                gain_break,value_break,kalman_gain
              -  KalmanFilter::SetGainBreakdownThresh()
                `gain_break_down={0,0,0,0,1,1}  gain_break_down_threshold = 2.0f`
                用于校正不合理的加速度增益
-             - KalmanFilter::SetValueBreakdownThresh()
+             -  KalmanFilter::SetValueBreakdownThresh()
                `value_break_down={0,0,1,1,0,0} value_break_down_threshold = 0.05f`
-               用于校正不合理的速度
-
-           - KalmanMotionFusion::MotionFusionWithMeasurement()
-
-             - KalmanFilter::Predict(）
-               预测状态X(k+1|k)和协方差阵P `global_state,global_uncertainty`
-
-             -  KalmanMotionFusion::ComputeAccelerationMeasurement()
-               计算加速度，当measurement传感器类型为camera时利用kalman滤波当前推断的加速度状态，当measurement传感器类型为lidar或radar利用`history_velocity`
-
-             - 根据measurement object的中心位置和速度的不确定性更新测量协方差矩阵R
-
-             - KalmanMotionFusion::ComputePseudoMeasurement()
-               计算伪测量值，根据lidar和radar，camera的原始测量值,以lidar为例，如果给定lidar的测量值能够在短时间内较好的估计radar的测量值，则将radar的测量值投影到给定的lidar测量值，具体如下：
-
-               - KalmanMotionFusion::ComputePseudoLidarMeasurement()
-                 以lidar为例,首先追溯radar的测量历史`history_velocity_` ,试图通过找到好的radar测量值用于获得更加精确的lidar测量值(radar传感器本身速度测量较准)，如何算好的radar历史测量值？给出如下标准：
-
-                 1. radar速度的长度(标量)应与lidar速度的长度差值小于阈值5
-                 2. radar测量速度矢量与lidar测量速度矢量的夹角(认为时角速度)小于阈值pi/20
-                 3. radar速度矢量在lidar速度方向上的投影向量与lidar速度向量的差值矢量与加速度矢量的夹角(认为是角加速度)小于阈值
-                 4. 上述投影差值矢量也应小于一定阈值
-
-                 满足条件，则将radar速度矢量的在lidar方向的投影值作为pseudo_measurement
-
-             - KalmanMotionFusion::RewardRMatrix()
-               根据传感器类型和速度是否收敛(object->velocity_converged)调整测量协方差阵R，
-
-             - KalmanFilter::DeCorrelation() 去相关
-
-             - KalmanFilter::Correct(）根据测量值和测量的不确定性矩阵R校正
-
-             - KalmanFilter::CorrectionBreakdown()
-               判断加速度和速度状态的变化是否小于一定阈值，否则速度设为0，加速度的根据阈值进行设置。
-
-           - 卡尔曼滤波更新之后进行形状和位置的融合，如果测量传感器是lidar：使用lidar的anchor point和fused velocity。如果测量传感器是radar，同时没有历史的lidar跟踪目标，使用fused anchor point 和fused velocity。如果测量传感器是camera,同时有历史的lidar跟踪目标，使用fused position和fused velocity(滤波器估计值)；测量传感器是camera，同时没有历史lidar跟踪目标但是有radar跟踪目标，位置采用radar的anchor_point,速度采用滤波器的结果fused_velocity()；既没有lidar有没有radar，直接使用测量值作为fused_velocity和fused_anchor_point_。
-             加速度的更新因为没有传感器测量直接采用卡尔曼滤波器的状态输出结果。
-
-           - KalmanMotionFusion::UpdateMotionState()
-             更新`track->fused_object`的运动状态，包括`velocity,acceleration,center_uncertainty`
-             ,`velocity_uncertainty,acceleration_uncertainty`,不确定性目前是直接根据measurement赋值
-
-         - PbfShapeFusion::UpdateWithMeasurement(）
-
-           - PbfShapeFusion::UpdateState(）
-             - PbfShapeFusion::UpdateShape(）
-               更新`track->fused_object`的形状信息,包括`size,direction,theta,polygon`
-             - PbfShapeFusion::UpdateCenter(）
-               更新`track->fused_object`的中心坐标，包括`center,anchor_point`,均直接根据测量值更新，没有中间处理
-
-     - ProbabilisticFusion::UpdateUnassignedTracks
-
+                用于校正不合理的速度
+         
+            - KalmanMotionFusion::MotionFusionWithMeasurement()
+         
+                 - KalmanFilter::Predict(）
+                预测状态X(k+1|k)和协方差阵P `global_state,global_uncertainty`
+         
+              - KalmanMotionFusion::ComputeAccelerationMeasurement()
+                计算加速度，当measurement传感器类型为camera时利用kalman滤波当前推断的加速度状态，当measurement传感器类型为lidar或radar利用`history_velocity`
+         
+              - 根据measurement object的中心位置和速度的不确定性更新测量协方差矩阵R
+         
+              -  KalmanMotionFusion::ComputePseudoMeasurement()
+         
+                  计算伪测量值，根据lidar和radar，camera的原始测量值,以lidar为例，如果给定lidar的测量值能够在短时间内较好的估计radar的测量值，则将radar的测量值投影到给定的lidar测量值，具体如下：
+         
+                  -  KalmanMotionFusion::ComputePseudoLidarMeasurement()
+         
+                        以lidar为例,首先追溯radar的测量历史`history_velocity_` ,试图通过找到好的radar测量值用于获得更加精确的lidar测量值(radar传感器本身速度测量较准)，如何算好的radar历史测量值？给出如下标准：
+         
+                      ```c++
+                       1. radar速度的长度(标量)应与lidar速度的长度差值小于阈值5
+                       2. radar测量速度矢量与lidar测量速度矢量的夹角(认为时角速度)小于阈值pi/20
+                       3. radar速度矢量在lidar速度方向上的投影向量与lidar速度向量的差值矢量与加速度矢量的夹角(认为是角加速度)小于阈值
+                       4. 上述投影差值矢量也应小于一定阈值
+                      ```
+         
+                        满足条件，则将radar速度矢量的在lidar方向的投影值作为pseudo_measurement
+         
+              -  KalmanMotionFusion::RewardRMatrix()
+         
+                  根据传感器类型和速度是否收敛(object->velocity_converged)调整测量协方差阵R，
+         
+              - KalmanFilter::DeCorrelation() 去相关
+         
+              - KalmanFilter::Correct(）根据测量值和测量的不确定性矩阵R校正
+         
+              -  KalmanFilter::CorrectionBreakdown()
+         
+                  判断加速度和速度状态的变化是否小于一定阈值，否则速度设为0，加速度的根据阈值进行设置。
+         
+              - 卡尔曼滤波更新之后进行形状和位置的融合，如果测量传感器是lidar：使用lidar的anchor point和fused velocity。如果测量传感器是radar，同时没有历史的lidar跟踪目标，使用fused anchor point 和fused velocity。如果测量传感器是camera,同时有历史的lidar跟踪目标，使用fused position和fused velocity(滤波器估计值)；测量传感器是camera，同时没有历史lidar跟踪目标但是有radar跟踪目标，位置采用radar的anchor_point,速度采用滤波器的结果fused_velocity()；既没有lidar有没有radar，直接使用测量值作为fused_velocity和fused_anchor_point_。
+               加速度的更新因为没有传感器测量直接采用卡尔曼滤波器的状态输出结果。
+         
+              - KalmanMotionFusion::UpdateMotionState()
+                更新`track->fused_object`的运动状态，包括`velocity,acceleration,center_uncertainty,velocity_uncertainty,`
+                ,acceleration_uncertainty`,不确定性目前是直接根据measurement赋值
+         
+         -  PbfShapeFusion::UpdateWithMeasurement(）
+         
+               - PbfShapeFusion::UpdateState(）
+                 - PbfShapeFusion::UpdateShape(）
+                   更新`track->fused_object`的DstTypeFusion::UpdateWithMeasurement(形状信息,包括`size,direction,theta,polygon`
+                 - PbfShapeFusion::UpdateCenter(）
+                 更新`track->fused_object`的中心坐标，包括`center,anchor_point`,均直接根据测量值更新，没有中间处理
+               
+         
+         - DstTypeFusion::UpdateWithMeasurement()
+           创建测量值对应的`Dst`
+         
+           - DstTypeFusion::TypeProbsToDst()
+             将物体`object->type_probs`转换为Dst。
+         
+             - DstTypeFusion::TypToHyp()
+               将物体原检测类型转换为`Dst hypothesis types`,映射关系为:
+         
+               | origin object type | value | dst hypothesis types | value          |
+               | ------------------ | ----- | -------------------- | -------------- |
+               | UNKNOWN            | 0     | OTHERS               | 0001 1000 (24) |
+               | UNKNOWN_MOVABLE    | 1     | OTHERS_MOVABLE       | 0000 1000 (8)  |
+               | UNKNOWN_UNMOVABLE  | 2     | OTHERS_UNMOVABLE     | 0001 0000 (16) |
+               | PEDESTRIAN         | 3     | PEDESTRIAN           | 0000 0001 (1)  |
+               | BICYCLE            | 4     | BICYCLE              | 0000 0010 (2)  |
+               | VEHICLE            | 5     | VEHICLE              | 0000 0100 (4)  |
+               |                    |       | UNKNOWN              | 0001 1111 (31) |
+         
+               将`origin object type`的检测概率值分别赋值到对应的`dst type`中构成`res_bba_map` 
+         
+             - Dst::SetBba()
+               设置`bba_vec_`根据当前检测类别概率值构造的`res_bba_map`,`fod_subsets_`包括:
+               `{PEDESTRIAN, BICYCLE, VEHICLE, OTHERS_MOVABLE, OTHERS_UNMOVABLE, OTHERS,  UNKNOWN}` 
+         
+           - 根据 当前测量值设置`bba_vec_` 的`measurement_dst`对之前存在的`fused_dst_`进行更新。
+         
+             ```c++
+             fused_dst_ =
+                   fused_dst_ + measurement_dst * GetReliability(measurement->GetSensorId());
+             ```
+         
+           - DstTypeFusion::GetReliability()
+             获取当前检测传感器对于物体类别的可靠程度：
+             `velodyne64:0.5,front_6mm:0.95,front_12mm:0.5,....`等等,相机的类别检测的置信度较高
+             
+           - 如果当前测量值对应的传感器是相机，则将测量值对应的`object->sub_type`赋值到
+             `fused_object->sub_type`
+         
+           - DstTypeFusion::UpdateTypeState()
+             根据融合后的`bba_vec_`更新`fused_object`的类型概率。
+         
+             - DstTypeFusion::HypToTyp()
+               将`hypothesis type`映射回原物体类型，这里将最大概率(bba_vec_中最大值索引)的`hypothesis`映射回`origin object type`并设置为`fused_object->type`
+         
+             - 修正`fused_object->subtype`
+               之前`fused_object->sub_type`由测量的物体的`sub_type`直接赋值，此处在更新了`type`之后，需要判断该子类型对应的`type`是否和更新的`type`相等，不相等将`fused->subtype`设置为`base::ObjectSubType::UNKNOWN`
+         
+             - 更新`fused_object->type_probs`
+         
+               根据`fused_subset`与原`type`的映射，将`bba_vec_`中的值复制到`type_probs`中
+               
+         
+         - Track::UpdateWithSensorObject()
+            更新track对应的`SensorObject`,添加带有传感器id标记的object到对应的`lidar_objects_`,`radar_objects_`或`camera_objects_`的map中进行覆盖。然后将map中超时未被测量值匹配的object删除。同时需要更新最近一次被跟踪的时间戳为当前测量值的时间戳，更新对应传感器类型的补充属性，设置`is_alive_=True`，表明该track为活跃的。
+         
+            - Track::UpdateSensorObject()
+              更新测量值对应传感器类型的objects中对应sensor_id(用于区分同一类传感器)的object,注意此处为直接覆盖。
+            - Track::UpdateSensorObjectWithMeasurement()
+              根据传感器最大容忍的invisible时间间隔(lidar 0.25s radar 0.5s camera 0.75s),超出该时间间隔(即在这段时间内没有新的测量值进行匹配)则从objects中将对应的object删除
+              对track中的`lidar_objects`,`radar_objects`,`camera_objects`分别执行上述过程。
+            - 更新`fused_object_->latest_tracked_time`为当前测量物体的时间戳。
+            - Track::UpdateSupplementState()
+              将测量值`object`的补充属性直接赋值到`fused_object`的补充属性中。同时对于track中
+              `lidar_objects_`,`radar_objects_`或`camera_objects_`谁为空(目前该传感器还没有匹配的测量值)就将谁对应的`fused_object`中对应的`lidar_supplement`,`camera_supplement`或
+              `camera_supplement`重置
+            - Track::UpdateUnfusedState()
+              更新未融合的`fused_object`剩下的相关状态，对于lidar更新`fused_object->confidence`和`fused_object->velocity_converged`,对于radar没有啥还需要更新的，对于camera需要更新`fused_object->confidence`
+       
+     - ProbabilisticFusion::UpdateUnassignedTracks()
+       更新未被当前帧测量值匹配的track的状态,与函数`UpdateAssignedTracks()`类似，此处有一个参数`match_distance`用于在`ExistanceFusion`中计算`toic score`,由于此处track没有对应的测量值进行匹配，由于没有用到，临时设置match_dsitance为0。
+     
+       - PbfTracker::UpdateWithoutMeasurement()
+         更新track的状态同样也包含四类融合：类型融合`DstTypeFusion`,运动状态融合`KalmanMotionFusion`,存在性融合`DstExistanceFuison`以及形状外观融合`PbfShapeFusion`,基本方法同有测量值的更新，此处简述：
+     
+         - DstExistanceFusion::UpdateWithoutMeasurement()
+           输入:包括sensor_id,测量时间戳(当前检测数据帧的时间戳),`min_match_dist`(输入时的临时值为0)
+           输出:`track->toic_prob`,`track->existance_prob`
+           
+           - DstExistanceFusion::UpdateToicWithoutCameraMeasurement()
+             虽然当前帧没有匹配的测量值,但是利用历史track最近匹配lidar或radar检测物体进行可视程度的判断,用于更新`toic_`
+           
+         - KalmanMotionFusion::UpdateWithoutMeasurement()
+           就是根据时间差异进行一个简单的预测，由于没有测量因此也就没有校正阶段,但预测的前提是要求该track已经的kalman_filter已经初始化过同时有过匹配的测量值,更新fused_object的相关属性如下：
+           `track->fused_object->velocity`,`acceleration`,`center_uncertainty`,
+           `velocity_uncertainty`,`acceleration_uncertainty`
+           
+         - PbfShapeFusion::UpdateWithoutMeasurement()
+           do nothing!
+           
+         - DstTypeFusion::UpdateWithoutMeasurement()
+           仅对当前帧的测量传感器是相机的情况进行处理,比较特殊的是相机在计算不可信度时，采用了时间信息，根据当前测量的时间戳转换到小时，判断是否是晚上以此获得更新的权重比例。
+           
+           ```c++
+             std::map<std::string, double> sensor_reliability_for_unknown_ = {
+               {"velodyne64", 0.5},          {"velodyne_64", 0.5},
+               {"velodyne128", 0.5},         {"camera_smartereye", 0.2},
+               {"front_6mm", 0.2},           {"camera_front_obstacle", 0.2},
+               {"camera_front_narrow", 0.2},
+           ```
+           
+           更新track的相关属性如下:
+           `track->fused_object->type_probs`
+           
+         - Track::UpdateWithoutSensorObject()
+           
+           - Track::UpdateSensorObjectWithoutMeasurement()
+             根据当前测量时刻的时间戳对track目前存在的历史`lidar_objects`,`radar_objects`
+             ,`camera_objects`的`invisible_period`进行更新。对于`invisible_period`大于阈值的
+             objects进行清除。
+             根据track当前的`lidar_objects,radar_objects`,`camera_objects`是否全部为空来判断track是否是alive。
+     
      - ProbabilisticFusion::CreateNewTracks
+     
+       根据未进行匹配当前帧测量物体,创建新的跟踪序列。
+     
+       - Track::Initialize()
+         从并发对象池中获取track实例，并进行初始化，初始化过程主要由以下几步：
+         1. 重置`lidar_objects_,radar_objects_,camera_objects_`, 将fused_object设置为当前测量值并分配新的全局track_id。
+         2. Track::UpdateWithSensorObject()根据测量值对应的sensor_id将相应值添加到`lidar_objects_`或
+            `radar_objects`或`camera_objects`中
+       - Scene::AddForegroundTrack(TrackPtr track)
+         将该`track_`添加到`foreground_tracks_`列表中。
+       - PbfTracker::Init(TrackPtr track, SensorObjectPtr measurement)
+         创建`<PbfTracker>`实例`tracker`，并通过`track_`和测量值进行初始化,首先通过`InitMethods`初始化跟踪融合的相关方法`type_fuison,shape_fusion,existance_fusion,motion_fusion`,创建他们的方法类实例。
+       - 将创建的`tracker`添加到`ProbabilisticFusion::trackers_`列表中
+         
+   
+   - ProbabilisticFusion::FusebackgroundTrack(const SensorFramePtr& frame)
+     背景物体跟踪,注意只有lidar传感器检测背景类物体。
+     - 首先进行background_tracks和background_objects的关联，关联依据是track->fused_object->track_id(即该track目前对应的object的局部track_id)与当前检测物体的局部`track_id`相等，则进行关联
+     - 然后对已经匹配的track和object进行状态更新:
+       Track::UpdateWithSensorObject(const SensorObjectPtr& obj)
+       更新`track`中的sensor_objects (此处应该为`lidar_objects`)
+       - Track::UpdateWithSensorObjectForBackground()
+         根据测量值的BaseObject更新`fused_object_`的BaseObject,但是保留原`fused_object_`的track_id
+     - 然后对未匹配的track进行状态更新:
+       Track::UpdateWithoutSensorObject()
+     - 对未匹配的object创建新的跟踪序列:
+       从对象池中获取`track`实例，进行初始化`track->Initialize(...);`分配新的track_id。 
+       - Scene::AddBackgroundTrack()
+         将新创建的track加入到背景跟踪列表`background_tracks_`中。
+   - ProbabilisticFusion::RemoveLostTrack() 
+     对应前景类，移除`track`和track对应的处理类`tracker`(仅前景类foreground存在该tracker处理)
+     查看`track->is_alive_`是否为true(本质上为track的lidar_objects_,radar_objects,camera_objects是否全为空),
+     对于背景类，仅需要移除`track`
 
-   - FusedbackgroundTrack 背景融合
+4. **collect fused objects**
 
-   - RemoveLostTrack 移除跟丢的Track
+   ```c++
+    // @brief: 收集融合的检测目标
+    // @params[in]: timestamp 当前传感器帧的时间戳
+    // @params[out]: fused_objects 融合的objects
+    void ProbabilisticFusion::CollectFusedObjects(double timestamp,
+                              std::vector<base::ObjectPtr>* fused_objects);
+   ```
+
+   - PbfGatekeeper::AbleToPublish(const TrackPtr &track)
+     对于前景物体跟踪的各个track查询各个类别传感器对应的`invisible_period_`,下列三个函数返回各类传感器是否是Visible
+
+     ```c++
+     track->IsLidarVisible() //(note:lidar类别传感器有不同的id,例如64线,32线等等)
+     track->IsRadarVisible() //相机和radar同理
+     track->IsCameraVisible()
+     ```
+
+     判断`invisible_period< 1.0e-6`(要求一类传感器中的所有object) 即判断该传感器是否存在跟踪的中断。
+     下面三个函数分别判断传感器数据能否发布,若三种传感器都不能发布则返回False。
+
+     ```c++
+     //要求lidar is visible 同时参数params_.publish_if_has_lidar为true时返回True
+     PbfGatekeeper::LidarAbleToPublish()
+     //要求radar is visible 同时参数params_.publish_if_has_radar为true时,若track->radar_object
+     // 为"radar_front" ,返回false;若为"radar_rear",则满足：
+     // track->radar_object.range > 40; track->radar_object.velocity>4.0,
+     // track->existance_prob_>0.9 时返回true.
+     PbfGatekeeper::RadarAbleToPublish()
+     //　要求camera is visible 同时params_.publish_if_has_camera为true,is_night=False(白天)。
+     //  当subtype=TRAFFICCONE无视range大小及进行发布；若subtype=UNKNOWN_UNMOVABLE则还要求物体的
+     //  距离相机的距离>50
+     //　track->existance_prob_>0.7
+     PbfGatekeeper::CameraAbleToPublish()
+     ```
+
+     - AddTrackedTimes()
+       ++tracked_times_　增加该track被跟踪次数。 前提是上述条件满足。
+     - GetTrackedTimes()
+       紧接着查询正常跟踪的次数，如果大于预设参数`params_.pub_track_time_thresh=3`表明该track已经超过3次被正常跟踪，可以进行发布了。
+
+   - ProbabilisticFusion::CollectObjectsByTrack()
+     从跟踪tracks中收集objects的相关属性,引入数据类型`<SensorObjectMeasurement>`位于object->fusion_supplement中:
+
+     ```c++
+       std::string sensor_id = "unknown_sensor";
+       double timestamp = 0.0;
+       int track_id = -1;
+       Eigen::Vector3d center = Eigen::Vector3d(0, 0, 0);
+       float theta = 0.0f;
+       Eigen::Vector3f size = Eigen::Vector3f(0, 0, 0);
+       Eigen::Vector3f velocity = Eigen::Vector3f(0, 0, 0);
+       ObjectType type = ObjectType::UNKNOWN;
+       // @brief only for camera measurement
+       BBox2D<float> box;
+     ```
+
+     - ProbabilisticFusion::CollectSensorMeasurementFromObject(...)
+
+       首先对于基础属性，直接将track->fused_object->baseobject赋值到该obj中;
+       对于补充属性(fusion_supplement),从track->lidar_objects,track->radar_objects,track->camera_objects中分别得到上述`<SensorObjectMeasurement>`中的参数值，保存到` obj->fusion_supplement.measurements`中，其中`measurements`为一个向量数组，大小为下所示，分别保存了对应该track的所有测量值。
+       `lidar_objects_.size() + camera_objects_.size() + radar_objects_.size()`
+       除了上述数据类型中的值外,设置该obj的track_id,latest_tracked_time(上一次被跟踪的时间),tracking_time(跟踪时长)
+
+       ```c++
+         obj->track_id = track->GetTrackId();
+         obj->latest_tracked_time = timestamp;
+         obj->tracking_time = track->GetTrackingPeriod();
+       ```
+
+       对每一个track执行上述操作后，得到的obj添加到`fused_objects`列表中。
+
+   - 对于背景物体的跟踪的相关处理方法同上，此处不赘述。
+
+至此，`fusion_->Fuse(options, frame, objects)`完成,返回到`fusion_component`组件中。
+
+------
+
+
+
+
+
 
 
 
@@ -690,8 +921,10 @@ struct DstCommonData {
   // for transforming to probability effectively 存储各subset的二进制中1的位数
   std::vector<size_t> fod_subset_cardinalities_;
   std::vector<std::string> fod_subset_names_;
-  // for combining two bbas effectively. 用于计算probability_vec_,第一维表示两个fod_subset交集(大小为
-  // fod_sets大小)对应的subset的索引编号，第二维为对应该交集的所有两个fod_subset的索引编号pair
+  // for combining two bbas effectively. 用于计算probability_vec_,
+  //  第一维表示两个fod_subset交集(大小为fod_sets大小)对应的subset的索引编号
+  //  第二维为对应该交集的所有两个fod_subset的索引编号pair
+  //　用于结合两个bbas
   std::vector<std::vector<std::pair<size_t, size_t>>> combination_relations_; 
   // for computing support vector effectively,第一维大小为fod_subsets大小，第二维存储各fod_subset二进制
   //包含（存在包含关系）的subset所对应的索引编号
@@ -784,6 +1017,50 @@ Dst operator*(const Dst &dst, double w) {
 
 
 ##### 3.2 DstTypeFusion
+
+```c++
+struct DstMaps {
+  // dst hypothesis types
+  enum {
+    PEDESTRIAN = (1 << 0), //1      0000 0001
+    BICYCLE = (1 << 1), //2         0000 0010
+    VEHICLE = (1 << 2), //4         0000 0100
+    OTHERS_MOVABLE = (1 << 3), //8  0000 1000
+    OTHERS_UNMOVABLE = (1 << 4)//16 0001 0000   
+  };
+  enum {
+    OTHERS = (OTHERS_MOVABLE | OTHERS_UNMOVABLE), //24 0001 1000
+    UNKNOWN = (PEDESTRIAN | BICYCLE | VEHICLE | OTHERS) //31 0001 1111
+  };
+
+  std::vector<uint64_t> fod_subsets_ = {
+      PEDESTRIAN,       BICYCLE, VEHICLE, OTHERS_MOVABLE,
+      OTHERS_UNMOVABLE, OTHERS,  UNKNOWN};
+  std::vector<std::string> subset_names_ = {
+      "PEDESTRIAN",       "BICYCLE", "VEHICLE", "OTHERS_MOVABLE",
+      "OTHERS_UNMOVABLE", "OTHERS",  "UNKNOWN"};
+  std::unordered_map<size_t, uint64_t> typ_to_hyp_map_ = {
+      {static_cast<size_t>(base::ObjectType::PEDESTRIAN), PEDESTRIAN},
+      {static_cast<size_t>(base::ObjectType::BICYCLE), BICYCLE},
+      {static_cast<size_t>(base::ObjectType::VEHICLE), VEHICLE},
+      {static_cast<size_t>(base::ObjectType::UNKNOWN_MOVABLE), OTHERS_MOVABLE},
+      {static_cast<size_t>(base::ObjectType::UNKNOWN_UNMOVABLE),
+       OTHERS_UNMOVABLE},
+      {static_cast<size_t>(base::ObjectType::UNKNOWN), OTHERS},
+  };
+  std::map<uint64_t, size_t> hyp_to_typ_map_ = {
+      {PEDESTRIAN, static_cast<size_t>(base::ObjectType::PEDESTRIAN)},
+      {BICYCLE, static_cast<size_t>(base::ObjectType::BICYCLE)},
+      {VEHICLE, static_cast<size_t>(base::ObjectType::VEHICLE)},
+      {OTHERS_MOVABLE, static_cast<size_t>(base::ObjectType::UNKNOWN_MOVABLE)},
+      {OTHERS_UNMOVABLE,
+       static_cast<size_t>(base::ObjectType::UNKNOWN_UNMOVABLE)},
+      {OTHERS, static_cast<size_t>(base::ObjectType::UNKNOWN)},
+      {UNKNOWN, static_cast<size_t>(base::ObjectType::UNKNOWN)}};
+};
+```
+
+
 
 ##### 3.3 KalmanMoitonFusion
 
