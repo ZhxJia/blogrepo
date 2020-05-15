@@ -527,11 +527,11 @@ match_distance差距不大，因此此处设为0
               更新`track->toic_prob_`和`track->existance_prob_`
             
            - KalmanMotionFusion::UpdateWithMeasurement(）
-           基于Kalman Filter更新track的运动信息:
+             基于Kalman Filter更新track的运动信息:
          
            - KalmanMotionFusion::InitFilter()
              初始化滤波器的相关状态和不确定性矩阵，全局状态有
-            $[center(2),velocity(2),acceleration(2)]$6个。
+               $[center(2),velocity(2),acceleration(2)]$6个。
          
              -  KalmanMotionFusion::UpdateSensorHistory(）
                `std::deque<base::SensorType> history_sensor_type_`中存储了过去物体测量值对应的传感器类型，存储容量为20，`history_velocity_`,`history_timestamp_`同理，分别存储过去测量值的速度和检测时间戳，用途是计算加速度和pseudo measurement，注意radar和lidar各自的最长追溯值为3个。
@@ -599,7 +599,6 @@ match_distance差距不大，因此此处设为0
                  - PbfShapeFusion::UpdateCenter(）
                  更新`track->fused_object`的中心坐标，包括`center,anchor_point`,均直接根据测量值更新，没有中间处理
                
-         
          - DstTypeFusion::UpdateWithMeasurement()
            创建测量值对应的`Dst`
          
@@ -727,7 +726,7 @@ match_distance差距不大，因此此处设为0
          创建`<PbfTracker>`实例`tracker`，并通过`track_`和测量值进行初始化,首先通过`InitMethods`初始化跟踪融合的相关方法`type_fuison,shape_fusion,existance_fusion,motion_fusion`,创建他们的方法类实例。
        - 将创建的`tracker`添加到`ProbabilisticFusion::trackers_`列表中
          
-   
+     
    - ProbabilisticFusion::FusebackgroundTrack(const SensorFramePtr& frame)
      背景物体跟踪,注意只有lidar传感器检测背景类物体。
      - 首先进行background_tracks和background_objects的关联，关联依据是track->fused_object->track_id(即该track目前对应的object的局部track_id)与当前检测物体的局部`track_id`相等，则进行关联
@@ -746,7 +745,7 @@ match_distance差距不大，因此此处设为0
      对应前景类，移除`track`和track对应的处理类`tracker`(仅前景类foreground存在该tracker处理)
      查看`track->is_alive_`是否为true(本质上为track的lidar_objects_,radar_objects,camera_objects是否全为空),
      对于背景类，仅需要移除`track`
-
+   
 4. **collect fused objects**
 
    ```c++
@@ -826,7 +825,8 @@ match_distance差距不大，因此此处设为0
 
 ------
 
-
+序列化消息用于发布：`viz_message`,`out_message`
+当测量传感器为主传感器时，通过节点发布。
 
 
 
