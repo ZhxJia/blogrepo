@@ -3,7 +3,7 @@ title: Apollo中的标定
 tags:
 - 目标跟踪
 categories:
-- paper
+- paper reading
 mathjax: True
 ---
 

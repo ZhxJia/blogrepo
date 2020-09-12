@@ -5,8 +5,8 @@ tags:
 - 标定
 - 视觉
 categories:
+- autonomous
 - apollo
-- perception
 mathjax: True
 ---
 
