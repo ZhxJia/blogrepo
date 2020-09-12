@@ -1,9 +1,10 @@
 ---
 title: Sort和DeepSort论文阅读笔记
 categories:
-- 论文阅读
+- paper reading
+- MOT 
 tags:
-- 目标跟踪
+- MOT
 mathjax: true
 ---
 

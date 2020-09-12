@@ -1,9 +1,10 @@
 ---
 title: HMM隐马尔科夫模型
 categories:
-- 概率论
+- mathematics
+- probability theory
 tags:
-- 概率论
+- mathematics
 mathjax: true
 ---
 

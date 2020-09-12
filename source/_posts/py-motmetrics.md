@@ -3,8 +3,8 @@ title: py-motmetric使用
 tags:
 - MOT
 categories:
-- 目标跟踪
-- 多目标跟踪
+- paper reading
+- MOT
 mathjax: True
 ---
 

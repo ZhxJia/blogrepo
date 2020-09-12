@@ -1,9 +1,10 @@
 ---
 title: 《Deep Learning for Image and Point Clound Fusion in Autonomous Driving:A Review》
 tags:
-- 传感器融合
+- sensor fusion
 categories:
-- 论文阅读
+- paper reading
+- sensor fusion
 mathjax: true
 ---
 

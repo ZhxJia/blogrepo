@@ -1,7 +1,11 @@
 ---
-
-title: apollo编译遇到的一些问题
-
+title: apollo感知部分编译遇到的一些问题
+tags:
+- apollo
+categories:
+- autonomous
+- apollo
+mathjax: true
 ---
 
 apollo感知部分编译遇到的一些问题

@@ -3,7 +3,7 @@
 title: 序列容器
 categories:
 - c++
-- 模板类
+- STL
 tags:
 - c++
 - STL

@@ -1,9 +1,10 @@
 ---
 title: 单视图衡量论文阅读
 categories:
-- 论文
+- paper reading 
+- detector
 tags:
-- 单视图衡量
+- detector
 mathjax: true
 
 ---

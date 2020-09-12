@@ -1,9 +1,11 @@
 ---
 title: 最优估计 -- kalman and lsm
 tags:
-- 优化
+- kalman filter
+- optimization
 categories:
-- 最优估计
+- optimization
+- kalman filter
 mathjax: true
 ---
 kalman Filter 和 least square 目的均为最优化某一指标，指标是优化的关键：

@@ -1,9 +1,10 @@
 ---
 title: tracking without bells and whistles论文阅读
 categories:
-- 论文
+- paper reading 
+- MOT
 tags:
-- track
+- MOT
 mathjax: true
 ---
 
