@@ -1,9 +1,10 @@
 ---
 title: Apollo编译过程及存在的问题
 categories:
+- autonomous
 - apollo
 tags:
-- build
+- apollo
 mathjax: true
 ---
 

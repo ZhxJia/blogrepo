@@ -1,9 +1,10 @@
 ---
 title: apollo lidar驱动组件
 tags:
-- 感知
+- apollo
 categories:
-- lidar
+- autonomous
+- apollo
 mathjax: true
 ---
 

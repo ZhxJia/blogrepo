@@ -1,10 +1,10 @@
 ---
 title: Apollo坐标转换组件
 categories:
+- autonomous
 - apollo
-- transform
 tags:
-- 坐标转换
+- apollo
 mathjax: true
 
 ---
@@ -279,13 +279,14 @@ cc_library(
 
   - **Buffer::canTransform**
     在超时时间`timeout_second`时间范围内，每3000us执行下列函数查询是否有可用的Transform
+    
     - **BufferCore::canTransform**
   - **Buffer::lookupTransform**
     - **BufferCore::lookupTransform**  返回tf2_trans_stamped
-    - **Buffer::TF2MsgToCyber(tf2_trans_stamped,trans_stamped)** 将tf2格式的信息转换为proto格式的信息
-
-  <img src="apollo-transfom_wrapper\all.jpg" alt="图片来源于https://github.com/daohu527/Dig-into-Apollo/tree/master/transform" style="zoom:50%;" />
-
+  - **Buffer::TF2MsgToCyber(tf2_trans_stamped,trans_stamped)** 将tf2格式的信息转换为proto格式的信息
+  
+<img src="apollo-transfom_wrapper\all.jpg" alt="图片来源于https://github.com/daohu527/Dig-into-Apollo/tree/master/transform" style="zoom:50%;" />
+  
   动态转换主要是关于世界坐标系到本地坐标系的转换，实现于定位模块中，而各传感器之间的转换主要是静态转换，动态转换和静态转换最后同意由buffer管理，需要用到转换关系的模块通过查询接口获得对应的转换关系。
 
 ## 4 Transform Wrapper

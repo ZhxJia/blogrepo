@@ -1,8 +1,10 @@
 ---
 title: apollo lidar算法--segmentaion component（一）
 tags:
-- lidar目标检测
+- apollo
+- detector
 categories:
+- autonomous
 - apollo
 mathjax: true
 ---

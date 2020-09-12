@@ -1,10 +1,10 @@
 ---
 title: Apollo中can卡配置
 categories:
-- 无人驾驶
+- autonomous
 - apollo
 tags:
-- 无人驾驶
+- apollo
 mathjax: true
 ---
 apollo开源框架中can卡的配置

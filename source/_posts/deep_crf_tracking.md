@@ -1,9 +1,10 @@
 ---
 title: Deep CRF with Inter-Object Constraints论文阅读
 categories:
-- 论文
+- paper reading
+- MOT
 tags:
-- track
+- MOT
 mathjax: true
 ---
 

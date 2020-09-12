@@ -1,6 +1,7 @@
 ---
 title: Component 组件注册过程
 categories:
+- autonomous
 - apollo
 tags:
 - apollo

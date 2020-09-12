@@ -2,10 +2,11 @@
 
 title: Apollo中多传感器标定与坐标系统
 categories:
+- autonomous
 - apollo
-- perception
 tags:
-- 传感器标定
+- apollo
+- calibration
 mathjax: true
 ---
 

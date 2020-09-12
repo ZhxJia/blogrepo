@@ -3,9 +3,9 @@
 title: bazel C++编译入门
 categories: 
 - c++
-- 工具
+- build
 tags:
-- 工具
+- c++
 ---
 
 <!-- more -->

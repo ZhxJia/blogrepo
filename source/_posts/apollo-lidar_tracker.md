@@ -1,8 +1,10 @@
 ---
 title: apollo lidar算法--recognition component（一）
 tags:
-- lidar目标跟踪
+- apollo
+- MOT
 categories:
+- autonomous
 - apollo
 mathjax: true
 ---

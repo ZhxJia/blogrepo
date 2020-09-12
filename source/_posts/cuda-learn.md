@@ -1,4 +1,11 @@
-
+---
+title: Apollo中can卡配置
+categories:
+- CUDA
+tags:
+- CUDA
+mathjax: true
+---
 
 
 

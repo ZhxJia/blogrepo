@@ -2,10 +2,10 @@
 
 title: Apollo中障碍物后处理
 categories:
+- autonomous
 - apollo
-- perception
 tags:
-- 障碍物检测
+- apollo
 mathjax: true
 ---
 

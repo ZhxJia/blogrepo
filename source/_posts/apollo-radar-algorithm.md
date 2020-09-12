@@ -2,11 +2,11 @@
 
 title: Apollo中radar的相关算法
 categories:
+- autonomous
 - apollo
-- perception
 tags:
+- apollo
 - radar
-- perception
 mathjax: true
 ---
 

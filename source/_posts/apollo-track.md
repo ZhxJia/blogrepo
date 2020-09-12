@@ -2,9 +2,11 @@
 
 title: Apollo 中的跟踪算法
 categories:
-- Apollo
+- autonomous
+- apollo
 tags:
-- track
+- apollo
+- MOT
 mathjax: ture
 ---
 

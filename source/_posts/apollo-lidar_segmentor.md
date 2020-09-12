@@ -1,8 +1,9 @@
 ---
 title: apollo lidar算法--segmentaion component（二）
 tags:
-- lidar目标检测
+- detector
 categories:
+- autonomous
 - apollo
 mathjax: true
 ---
@@ -339,6 +340,7 @@ LidarProcessResult LidarObstacleSegmentation::Process(
                                             const float* category_map,
                                         float confidence_threshold,
                                             float category_threshold) 
+         ```
      ```
        
      通过将cluster中所有的pixel对应的confidence或者category的分数和取平均作为cluster的置信度，根据阈值判断是否有效，并对clusters_ 进行过滤，并更新labels_ 中的标签，将无效的cluster的标签置为0(背景)
@@ -350,17 +352,18 @@ LidarProcessResult LidarObstacleSegmentation::Process(
            // @param [in]: class_map of the same size
        // @param [in]: class number default:5
            void SppLabelImage::CalculateClusterClass(const float* class_map, size_t class_num);
-         ```
-
+   ```
+  
          默认类别数量是有5类：`UNKNOWN,SAMLLMOT,BIGMOT,NONMOT,PEDESTRIAN` 
      网络的输出`class_map`共有class_num层,每一层大小为width*height(网格大小)
-       
+  
        - 根据网络输出的heading_data计算每个cluster的朝向
        
          ```c++
            // @brief: calculate heading (yaw) for each cluster, given heading map
-       // @param [in]: heading_map of the same size
+         // @param [in]: heading_map of the same size
            void SppLabelImage::CalculateClusterHeading(const float* heading_map);
+         ```
      ```
        
      网络输出的heading_map 是由x朝向和y朝向两层组成，根据x方向和y方向的位置朝向通过arctan(y/x)计算得到yaw轴角度。
@@ -372,7 +375,7 @@ LidarProcessResult LidarObstacleSegmentation::Process(
        // @param [in]: top_z_map of the same size
            void SppLabelImage::CalculateClusterTopZ(const float* top_z_map);
      ```
-       
+  
        - 根据label_image计算的clusters_ 对齐spp_cluster_list中的clusters_，然后向cluster中添加点云中的点的点的信息，即2d->3d
        
          ```c++
@@ -381,8 +384,9 @@ LidarProcessResult LidarObstacleSegmentation::Process(
            // @param [in]: 3d point
            // @param [in]: point height above ground
            // @param [in]: point id
-       void SppClusterList::AddPointSample(size_t cluster_id, const base::PointF& point,
+         void SppClusterList::AddPointSample(size_t cluster_id, const base::PointF& point,
                                	float height, uint32_t point_id);
+         ```
      ```
        
        - 清除空的cluster
@@ -390,7 +394,7 @@ LidarProcessResult LidarObstacleSegmentation::Process(
          ```c++
          // @brief: remove empty cluster from clusters
            void SppClusterList::RemoveEmptyClusters();
-       ```
+     ```
   
   3. 进行**背景分割**，首先需要同步线程，然后将roi点云中的高度拷贝到原始点云中，并将原始点云中的标签修改为对应roi_id的`LidarPointLabel::GROUND`，然后移除ground对应的点points。
   

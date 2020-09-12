@@ -2,9 +2,10 @@
 
 title: Apollo中毫米波雷达的初始化配置
 categories: 
+- autonomous
 - apollo
-- perception
 tags:
+- apollo
 - radar
 mathjax: true
 ---

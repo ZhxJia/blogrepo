@@ -2,10 +2,10 @@
 
 title: Apollo中的神经网络框架
 categories:
-- Apollo
+- autonomous
+- apollo
 tags:
-- Apollo
-- 深度学习
+- apollo
 mathjax: true
 ---
 
