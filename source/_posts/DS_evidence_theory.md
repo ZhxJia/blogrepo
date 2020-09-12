@@ -2,10 +2,11 @@
 
 title: DS(Dempster-Shafer)多元信息融合证据理论
 categories:
-- 无人驾驶
-- 多传感器融合
+- autonomous
+- apollo
 tags:
-- 多传感器融合
+- apollo
+- sensor fusion
 mathjax: true
 ---
 
@@ -206,19 +207,16 @@ $$
    \gamma_i(A)=\frac{m_i(A)/F(A)}{\sum_{\Phi\neq B\subseteq H}m_i(B)/F(B)},i=1,2
    $$
    
-
 3. 利用Dempster-Shafer合成公式，计算mass函数$\gamma(A)$
    $$
    \gamma(A)=(r_1 \oplus r_2 \oplus ... \oplus r_l)(A)
    $$
    
-
 4. 计算mass函数$v(A)$
    $$
    v(A)=\frac{\gamma(A)*F(A)}{\sum_{\Phi \neq D\subseteq H}\gamma(D)*F(D)},A\in P(H)
    $$
    
-
 5. 计算信度函数和似真度函数，
    $$
    Bel(A)=\sum_{D\subseteq A}v(D)\\

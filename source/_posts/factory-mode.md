@@ -1,11 +1,11 @@
 ---
 title: Apollo工厂模式解析
 categories:
-- 无人驾驶
-- c++
-tags:
+- autonomous
 - apollo
+tags:
 - c++
+- factory mode
 mathjax: true
 ---
 apollo 中工厂模式相关知识介绍

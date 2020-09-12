@@ -1,14 +1,18 @@
 ---
 
-title: doxygen
+title: doxygen安装
 categories:
-- 工具
+- tools
+- doxygen
 tags:
-- 工具
+- doxygen
 mathjax: true
 ---
 
+doxygen 自动文档生成工具安装
+
 <!-- more -->
+
 > 参考：https://www.ibm.com/developerworks/cn/aix/library/au-learningdoxygen/index.html
 
 ## 安装doxygen
