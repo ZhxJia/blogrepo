@@ -7,7 +7,7 @@ categories:
 mathjax: true
 ---
 
-
+apollo 点云分割算法的网络实现程序
 
 <!--more-->
 
@@ -239,7 +239,7 @@ output_channel_name: "/perception/inner/SegmentationObjects"
               - `PlaneFitGroundDetectorParam::Validate()` 判断输入参数是否有效
               - 创建`vg_fine_ = new VoxelGridXY<float>()`体素栅格用于对点云数据进行降采样
               - 
-            
+    
   - 初始化`roi filter`
             通过`<BaseROIFilter>`接口类创建`<HdmapROIFilter>`实现类然后初始化，用于从点云中提取roi区域的点云：
 
@@ -252,17 +252,17 @@ output_channel_name: "/perception/inner/SegmentationObjects"
               extend_dist: 0.0
               no_edge_table: false
               set_roi_service: true
-              ```
+      ```
   
               通过以上参数创建`<Bitmap2D>`类实例并初始化。
-    
+          
           - 初始化`spp engine`
         获取分割网络的相关输出用于后处理聚类,相关参数配置见本文最后。
-        
+      
           - 初始化 `thread worker` ,
           若存在HDMap输入，则进行ROIFilter，最终得到`roi_cloud_`和`roi_world_cloud_`
             roifilter之后则进行地平面检测
-        
+            
             ```c++
             ground_detector_->Detect(ground_detector_options, lidar_frame_ref_);
         ```
