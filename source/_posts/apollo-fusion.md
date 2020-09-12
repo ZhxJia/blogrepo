@@ -1,9 +1,11 @@
 ---
 title: apollo 融合算法--fusion component
 tags:
-- 多传感器融合
+- sensor fusion
+- apollo
 categories:
-- fusion
+- autonomous
+- apollo
 mathjax: true
 ---
 

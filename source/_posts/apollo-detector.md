@@ -1,9 +1,10 @@
 ---
 title: Apollo中的detector
 categories:
+- autonomous
 - apollo
 tags:
-- perception
+- apollo
 - detector
 mathjax: true
 ---

@@ -1,9 +1,10 @@
 ---
 title: Apollo中的标定
 tags:
-- 目标跟踪
+- object tracking
 categories:
 - paper reading
+- MOT
 mathjax: True
 ---
 

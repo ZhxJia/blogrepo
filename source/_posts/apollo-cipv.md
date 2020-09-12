@@ -2,8 +2,8 @@
 
 title: apollo中cipv检测
 categories:
+- autonomous
 - apollo
-- perception
 tags:
 - apollo
 mathjax: true

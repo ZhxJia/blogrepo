@@ -1,9 +1,8 @@
 ---
 title: Apollo中的标定
 tags:
-- 感知
-- 标定
-- 视觉
+- apollo
+- calibration
 categories:
 - autonomous
 - apollo

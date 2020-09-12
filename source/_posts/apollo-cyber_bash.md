@@ -2,8 +2,8 @@
 
 title: Apollo中Cyber RT脚本启动流程
 categories:
+- autonomous
 - apollo
-- Cyber RT
 tags:
 - apollo
 mathjax: true

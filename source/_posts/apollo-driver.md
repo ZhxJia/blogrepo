@@ -2,8 +2,8 @@
 
 title: apollo相机雷达的驱动
 categories:
+- autonomous
 - apollo
-- perception
 tags:
 - apollo
 mathjax: true

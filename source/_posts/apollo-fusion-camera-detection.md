@@ -2,8 +2,8 @@
 
 title: Apollo中fusion_camera_deteciton组件消息类型
 categories:
+- autonomous
 - apollo
-- perception
 tags:
 - apollo
 mathjax: true
